@@ -2,3 +2,4 @@ flask
 flask-socketio
 gTTS
 eventlet
+gunicorn
