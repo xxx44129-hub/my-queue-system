@@ -2,7 +2,7 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 from gtts import gTTS
 import os
-import time # เพิ่มแค่ตัวนี้เพื่อแก้ปัญหาไฟล์เสียงซ้ำ/หายบน Render
+import time
 
 # ====================
 # Flask + SocketIO
@@ -13,7 +13,7 @@ app.config["SECRET_KEY"] = "queue-system-secret"
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="eventlet" # เปลี่ยนเป็น eventlet เพื่อให้ WebSocket บน Render ลื่นไหล
+    async_mode="eventlet" # เปลี่ยนเพื่อให้รันบน Render ได้เสถียร
 )
 
 # ====================
@@ -40,14 +40,13 @@ def queue_to_thai(queue):
     return " ".join(mapping.get(c, c) for c in queue)
 
 def generate_tts(text, filename_prefix):
-    # บังคับสร้างไฟล์ใหม่เสมอด้วย Timestamp กันบัค Render ไม่สร้างไฟล์ใหม่
+    # แก้ไข: ใส่เวลาปัจจุบันต่อท้ายชื่อไฟล์เพื่อให้ Render ยอมสร้างไฟล์ใหม่สดๆ
     ts = int(time.time())
     filename = f"{filename_prefix}_{ts}.mp3"
     path = os.path.join(STATIC_DIR, filename)
 
-    # สร้างไฟล์เสียงใหม่ทุกครั้งที่มีการเรียก
-    tts = gTTS(text=text, lang="th", slow=False)
-    tts.save(path)
+    # บังคับสร้างใหม่ 100% ไม่เช็คว่ามีไฟล์เก่าไหม เพื่อแก้บัคเสียงเงียบ
+    gTTS(text=text, lang="th", slow=False).save(path)
     os.chmod(path, 0o644)
 
     return f"/static/{filename}"
@@ -56,6 +55,7 @@ def generate_tts(text, filename_prefix):
 # Routes
 # ====================
 @app.route("/")
+@app.route("/counter") # เพิ่มให้มึงเข้าได้ทั้งสองชื่อ จะได้ไม่เจอ 404
 def counter():
     return render_template("counter.html")
 
@@ -103,7 +103,6 @@ def call_next():
     if current_queue < last_queue:
         current_queue += 1
         q_text = format_queue(current_queue)
-        # ตามต้นฉบับมึงเป๊ะ: พูดแค่เลขคิว
         audio = generate_tts(queue_to_thai(q_text), q_text)
         emit("call_queue", { "queue": q_text, "audio": audio }, broadcast=True)
 
@@ -111,13 +110,11 @@ def call_next():
 def call_again():
     if current_queue > 0:
         q_text = format_queue(current_queue)
-        # ตามต้นฉบับมึงเป๊ะ: พูดแค่เลขคิว
         audio = generate_tts(queue_to_thai(q_text), q_text)
         emit("call_queue", { "queue": q_text, "audio": audio }, broadcast=True)
 
 @socketio.on("skip_order")
 def skip_order():
-    # ตามต้นฉบับมึงเป๊ะ: พูดว่าขออนุญาตข้าม Order
     audio = generate_tts("ขออนุญาตข้าม Order นะคะ", "skip_msg_original")
     emit("speak_only", {"audio": audio}, broadcast=True)
 
