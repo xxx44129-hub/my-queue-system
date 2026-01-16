@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>Queue Display</title>
+
+<!-- Socket.IO -->
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
+<!-- Web App / iOS -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<meta name="apple-mobile-web-app-title" content="Queue Display">
+<link rel="apple-touch-icon" href="/static/icon-512.png">
+
+<style>
+body {
+    margin: 0;
+    font-family: "Segoe UI", Arial, sans-serif;
+    background: linear-gradient(135deg, #0f2027, #2c5364);
+    color: white;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+.container { text-align: center; }
+.queue {
+    font-size: 240px;
+    font-weight: bold;
+    color: #ffd700;
+    text-shadow: 0 10px 20px rgba(0,0,0,0.5);
+    animation: pop 0.4s ease-out;
+}
+.subtitle { font-size: 42px; margin-top: 20px; }
+
+@keyframes pop {
+    from { transform: scale(0.5); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+/* overlay ปลดล็อกเสียง */
+#unlock {
+    position: fixed;
+    inset: 0;
+    background: black;
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 48px;
+    z-index: 9999;
+    text-align: center;
+    cursor: pointer;
+}
+</style>
+</head>
+
+<body>
+
+<div id="unlock">แตะหน้าจอหนึ่งครั้ง<br>เพื่อเริ่มระบบเสียง</div>
+
+<div class="container">
+    <div class="queue" id="queue">--</div>
+    <div class="subtitle">เมนูที่สั่งได้แล้วค่ะ</div>
+</div>
+
+<!-- ใช้ audio ตัวเดียวเท่านั้น -->
+<audio id="player" preload="auto"></audio>
+
+<script>
+/* =======================
+   setup
+======================= */
+const socket = io();
+const player = document.getElementById("player");
+const unlock = document.getElementById("unlock");
+const queueEl = document.getElementById("queue");
+
+let unlocked = false;
+let isPlaying = false;
+
+/* =======================
+   ปลดล็อกเสียง (iOS SAFE)
+======================= */
+function unlockAudio() {
+    if (unlocked) return;
+
+    player.src = "/static/beep.mp3";
+    player.play().then(() => {
+        player.pause();
+        player.currentTime = 0;
+        unlocked = true;
+        unlock.style.display = "none";
+        console.log("Audio unlocked");
+    }).catch(err => {
+        console.log("Unlock failed", err);
+    });
+}
+
+unlock.addEventListener("click", unlockAudio);
+
+/* =======================
+   helper เล่นเสียงทีละอัน (ไม่วน / ไม่ซ้อน)
+======================= */
+function playSound(src, onDone) {
+    player.onended = null;
+    player.pause();
+    player.currentTime = 0;
+
+    player.src = src;
+    player.play().then(() => {
+        if (onDone) {
+            player.onended = () => {
+                player.onended = null;
+                onDone();
+            };
+        }
+    }).catch(err => {
+        console.log("Play failed", err);
+        isPlaying = false;
+    });
+}
+
+/* =======================
+   เรียกคิว
+======================= */
+socket.on("call_queue", data => {
+    if (!unlocked || isPlaying) return;
+    isPlaying = true;
+
+    queueEl.innerText = data.queue;
+    queueEl.style.animation = "none";
+    queueEl.offsetHeight; // reflow
+    queueEl.style.animation = null;
+
+    // 🔔 beep → 🗣️ เสียงพูด
+    playSound("/static/beep.mp3", () => {
+        playSound(data.audio, () => {
+            isPlaying = false;
+        });
+    });
+});
+
+/* =======================
+   ข้ามออร์เดอร์
+======================= */
+socket.on("speak_only", data => {
+    if (!unlocked || isPlaying) return;
+    isPlaying = true;
+
+    playSound("/static/beep.mp3", () => {
+        playSound(data.audio, () => {
+            isPlaying = false;
+        });
+    });
+});
+</script>
+
+</body>
+</html>
