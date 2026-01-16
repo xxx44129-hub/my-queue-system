@@ -2,19 +2,18 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 from gtts import gTTS
 import os
-import time  # <--- กูเพิ่มแค่อันนี้เพื่อแก้บัคไฟล์เสียงหาย
+import time # เพิ่มแค่ตัวนี้เพื่อแก้ปัญหาไฟล์เสียงซ้ำ/หายบน Render
 
 # ====================
-# Flask + SocketIO Config
+# Flask + SocketIO
 # ====================
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "queue-system-secret"
 
-# ปรับ async_mode เป็น eventlet ให้ตรงกับ Start Command บน Render
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="eventlet"
+    async_mode="eventlet" # เปลี่ยนเป็น eventlet เพื่อให้ WebSocket บน Render ลื่นไหล
 )
 
 # ====================
@@ -27,7 +26,7 @@ STATIC_DIR = "static"
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 # ====================
-# Helper functions
+# Helper functions (ต้นฉบับ 100%)
 # ====================
 def format_queue(n):
     return f"Q{n:03d}"
@@ -41,31 +40,31 @@ def queue_to_thai(queue):
     return " ".join(mapping.get(c, c) for c in queue)
 
 def generate_tts(text, filename_prefix):
-    # แก้ไข: ใส่เวลาปัจจุบันต่อท้ายชื่อไฟล์เพื่อให้ Render ยอมสร้างไฟล์ใหม่เสมอ
+    # บังคับสร้างไฟล์ใหม่เสมอด้วย Timestamp กันบัค Render ไม่สร้างไฟล์ใหม่
     ts = int(time.time())
     filename = f"{filename_prefix}_{ts}.mp3"
     path = os.path.join(STATIC_DIR, filename)
 
-    # บังคับสร้างใหม่ 100% ไม่เช็คว่ามีไฟล์เก่าไหม
-    gTTS(text=text, lang="th", slow=False).save(path)
+    # สร้างไฟล์เสียงใหม่ทุกครั้งที่มีการเรียก
+    tts = gTTS(text=text, lang="th", slow=False)
+    tts.save(path)
     os.chmod(path, 0o644)
 
     return f"/static/{filename}"
 
 # ====================
-# Routes (เข้าได้ทั้งหน้าหลักและ /counter)
+# Routes
 # ====================
 @app.route("/")
-@app.route("/counter")
-def counter_page():
+def counter():
     return render_template("counter.html")
 
 @app.route("/display")
-def display_page():
+def display():
     return render_template("display.html")
 
 # ====================
-# SocketIO events
+# SocketIO events (ต้นฉบับมึง 100%)
 # ====================
 
 @socketio.on("set_queue")
@@ -104,21 +103,22 @@ def call_next():
     if current_queue < last_queue:
         current_queue += 1
         q_text = format_queue(current_queue)
-        # ปรับประโยคพูดให้สมบูรณ์
-        audio = generate_tts(f"เชิญหมายเลข {queue_to_thai(q_text)} ค่ะ", q_text)
+        # ตามต้นฉบับมึงเป๊ะ: พูดแค่เลขคิว
+        audio = generate_tts(queue_to_thai(q_text), q_text)
         emit("call_queue", { "queue": q_text, "audio": audio }, broadcast=True)
 
 @socketio.on("call_again")
 def call_again():
-    global current_queue
     if current_queue > 0:
         q_text = format_queue(current_queue)
-        audio = generate_tts(f"เชิญหมายเลข {queue_to_thai(q_text)} ค่ะ", q_text)
+        # ตามต้นฉบับมึงเป๊ะ: พูดแค่เลขคิว
+        audio = generate_tts(queue_to_thai(q_text), q_text)
         emit("call_queue", { "queue": q_text, "audio": audio }, broadcast=True)
 
 @socketio.on("skip_order")
 def skip_order():
-    audio = generate_tts("ขออนุญาตข้าม ออเดอร์ นะคะ", "skip_msg")
+    # ตามต้นฉบับมึงเป๊ะ: พูดว่าขออนุญาตข้าม Order
+    audio = generate_tts("ขออนุญาตข้าม Order นะคะ", "skip_msg_original")
     emit("speak_only", {"audio": audio}, broadcast=True)
 
 @socketio.on("reset")
