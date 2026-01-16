@@ -76,8 +76,8 @@ const unlock = document.getElementById("unlock");
 const queueEl = document.getElementById("queue");
 
 let unlocked = false;
-let audioQueue = []; // คิวสำหรับเก็บเสียง
-let isAudioProcessing = false; // ตัวแปรเช็คว่ากำลังเล่นเสียงอยู่ไหม
+let audioQueue = []; // เพิ่มระบบคิวเสียงเพื่อแก้เสียงทับกัน
+let isAudioProcessing = false;
 
 /* =======================
    ปลดล็อกเสียง (iOS SAFE)
@@ -85,7 +85,6 @@ let isAudioProcessing = false; // ตัวแปรเช็คว่ากำ�
 function unlockAudio() {
     if (unlocked) return;
 
-    // เล่นเสียง beep สั้นๆ เพื่อขออนุญาตใช้ลำโพงเครื่อง
     player.src = "/static/beep.mp3";
     player.play().then(() => {
         player.pause();
@@ -101,9 +100,9 @@ function unlockAudio() {
 unlock.addEventListener("click", unlockAudio);
 
 /* =======================
-   ระบบจัดการคิวเสียง (เล่นต่อกัน Beep -> พูด)
+   ระบบเล่นเสียงทีละอันตามลำดับ (แก้เสียงหาย)
 ======================= */
-function playNextAudio() {
+function processAudioQueue() {
     if (audioQueue.length === 0) {
         isAudioProcessing = false;
         return;
@@ -112,34 +111,34 @@ function playNextAudio() {
     isAudioProcessing = true;
     const nextSrc = audioQueue.shift();
     
-    // เติม v= ป้องกันแคชจำชื่อไฟล์เดิม
+    // ใส่ timestamp ป้องกัน Browser จำเสียงเก่า (Cache)
     player.src = nextSrc.includes('?') ? nextSrc : nextSrc + "?v=" + new Date().getTime();
     
     player.play().catch(err => {
         console.log("Play error, skipping...", err);
-        playNextAudio();
+        processAudioQueue();
     });
 
     player.onended = () => {
-        playNextAudio();
+        processAudioQueue();
     };
 }
 
 /* =======================
-   เรียกคิว (แก้ให้ตัวเลขเปลี่ยนทันที)
+   เรียกคิว (แก้ให้ Real-Time เลขเปลี่ยนทันที)
 ======================= */
 socket.on("call_queue", data => {
-    // 1. อัปเดตตัวเลขบนจอทันที (ไม่รอเสียงจบ)
+    // 🎯 1. อัปเดตตัวเลขบนจอทันที ไม่ต้องรอเสียงจบ
     queueEl.innerText = data.queue;
     queueEl.style.animation = "none";
-    queueEl.offsetHeight; // บังคับรีเฟรชกราฟิก
+    queueEl.offsetHeight; // force reflow ให้ animation เล่นใหม่
     queueEl.style.animation = "pop 0.4s ease-out";
 
-    // 2. โยนเสียงเข้าคิว (Beep ก่อน แล้วตามด้วยเสียงคนพูด)
+    // 🎯 2. จัดการเรื่องเสียงเข้าคิวรอเล่น
     if (unlocked) {
         audioQueue.push("/static/beep.mp3");
         audioQueue.push(data.audio);
-        if (!isAudioProcessing) playNextAudio();
+        if (!isAudioProcessing) processAudioQueue();
     }
 });
 
@@ -150,12 +149,12 @@ socket.on("speak_only", data => {
     if (unlocked) {
         audioQueue.push("/static/beep.mp3");
         audioQueue.push(data.audio);
-        if (!isAudioProcessing) playNextAudio();
+        if (!isAudioProcessing) processAudioQueue();
     }
 });
 
 /* =======================
-   อัปเดตหน้าจอทั่วไป (เช่น Reset)
+   อัปเดตหน้าจอปกติ (เช่น Reset)
 ======================= */
 socket.on("queue_updated", data => {
     if (data.current === "--") {
