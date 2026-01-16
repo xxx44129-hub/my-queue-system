@@ -2,7 +2,7 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 from gtts import gTTS
 import os
-import time  # เพิ่มมาเพื่อใช้ทำชื่อไฟล์ไม่ให้ซ้ำ
+import time  # <--- กูเพิ่มแค่อันนี้เพื่อแก้บัคไฟล์เสียงหาย
 
 # ====================
 # Flask + SocketIO Config
@@ -41,30 +41,27 @@ def queue_to_thai(queue):
     return " ".join(mapping.get(c, c) for c in queue)
 
 def generate_tts(text, filename_prefix):
-    # แก้ไข: เพิ่ม timestamp เข้าไปในชื่อไฟล์เพื่อให้ Render สร้างไฟล์ใหม่ตลอด
-    # ป้องกันปัญหาไฟล์เก่าค้างหรือโดนลบแล้วหาไม่เจอ (ตัวการที่ทำให้ไม่มีเสียง)
+    # แก้ไข: ใส่เวลาปัจจุบันต่อท้ายชื่อไฟล์เพื่อให้ Render ยอมสร้างไฟล์ใหม่เสมอ
     ts = int(time.time())
     filename = f"{filename_prefix}_{ts}.mp3"
     path = os.path.join(STATIC_DIR, filename)
 
-    # บังคับสร้างใหม่เสมอเพื่อความชัวร์ว่าเสียงมาแน่
+    # บังคับสร้างใหม่ 100% ไม่เช็คว่ามีไฟล์เก่าไหม
     gTTS(text=text, lang="th", slow=False).save(path)
     os.chmod(path, 0o644)
 
     return f"/static/{filename}"
 
 # ====================
-# Routes (แก้ให้เข้าได้ทุกทาง)
+# Routes (เข้าได้ทั้งหน้าหลักและ /counter)
 # ====================
 @app.route("/")
 @app.route("/counter")
 def counter_page():
-    # เข้าได้ทั้งหน้าหลัก และ /counter
     return render_template("counter.html")
 
 @app.route("/display")
 def display_page():
-    # หน้าจอแสดงผลสำหรับลูกค้า/ทีวี
     return render_template("display.html")
 
 # ====================
@@ -107,7 +104,7 @@ def call_next():
     if current_queue < last_queue:
         current_queue += 1
         q_text = format_queue(current_queue)
-        # แก้ไขข้อความให้นุ่มนวลขึ้นตามที่มึงต้องการ
+        # ปรับประโยคพูดให้สมบูรณ์
         audio = generate_tts(f"เชิญหมายเลข {queue_to_thai(q_text)} ค่ะ", q_text)
         emit("call_queue", { "queue": q_text, "audio": audio }, broadcast=True)
 
