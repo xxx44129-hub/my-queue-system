@@ -4,15 +4,16 @@ from gtts import gTTS
 import os
 
 # ====================
-# Flask + SocketIO
+# Flask + SocketIO Config
 # ====================
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "queue-system-secret"
 
+# ปรับ async_mode เป็น eventlet ให้ตรงกับ Start Command บน Render
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="threading"
+    async_mode="eventlet"
 )
 
 # ====================
@@ -25,7 +26,7 @@ STATIC_DIR = "static"
 os.makedirs(STATIC_DIR, exist_ok=True)
 
 # ====================
-# Helper functions (ต้นฉบับ 100%)
+# Helper functions
 # ====================
 def format_queue(n):
     return f"Q{n:03d}"
@@ -49,18 +50,21 @@ def generate_tts(text, filename_prefix):
     return f"/static/{filename}"
 
 # ====================
-# Routes
+# Routes (แก้ให้เข้าได้ทุกทาง)
 # ====================
 @app.route("/")
-def counter():
+@app.route("/counter")
+def counter_page():
+    # เข้าได้ทั้งหน้าหลัก และ /counter
     return render_template("counter.html")
 
 @app.route("/display")
-def display():
+def display_page():
+    # หน้าจอแสดงผลสำหรับลูกค้า/ทีวี
     return render_template("display.html")
 
 # ====================
-# SocketIO events (แก้ไขกลับเป็นแบบต้นฉบับ)
+# SocketIO events
 # ====================
 
 @socketio.on("set_queue")
@@ -76,8 +80,6 @@ def set_queue(data):
         if current_queue > last_queue:
             last_queue = current_queue
 
-        # 🎯 ตรงนี้ตามต้นฉบับ: ส่งไปแค่ queue_updated หน้าจอจะอัปเดตแค่เลข
-        # และไม่มีการส่ง call_queue ไปหาหน้า Display เสียงกริ่งจะไม่ดังแน่นอน
         emit("queue_updated", {
             "last": format_queue(last_queue),
             "current": format_queue(current_queue)
@@ -106,6 +108,7 @@ def call_next():
 
 @socketio.on("call_again")
 def call_again():
+    global current_queue
     if current_queue > 0:
         q_text = format_queue(current_queue)
         audio = generate_tts(queue_to_thai(q_text), q_text)
@@ -113,7 +116,7 @@ def call_again():
 
 @socketio.on("skip_order")
 def skip_order():
-    audio = generate_tts("ขออนุญาตข้าม Order นะคะ", "skip_msg_original")
+    audio = generate_tts("ขออนุญาตข้าม ออเดอร์ นะคะ", "skip_msg")
     emit("speak_only", {"audio": audio}, broadcast=True)
 
 @socketio.on("reset")
