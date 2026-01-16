@@ -61,48 +61,98 @@ button {
     <div class="current" id="current">--</div>
     <div class="info">คิวล่าสุด: <b id="last">--</b></div>
 
-    <!-- ตั้งค่าคิว -->
     <input id="setQueue" placeholder="กรอกคิว เช่น Q002"
         style="font-size:22px;padding:12px;width:80%;text-align:center;border-radius:10px;border:1px solid #ccc;">
     <br><br>
     <button style="background:#8e44ad;color:white;padding:12px 30px;border-radius:10px;"
-        onclick="setQueue()">ตั้งค่าคิว</button>
+        onclick="handleSetQueue()">ตั้งค่าคิว</button>
 
     <br><br>
 
     <div class="buttons">
         <button class="new" onclick="socket.emit('new_queue')">รับคิวใหม่</button>
-        <button class="next" onclick="socket.emit('call_next')">เรียกคิวถัดไป</button>
+        <button class="next" onclick="handleCallNext()">เรียกคิวถัดไป</button>
         <button class="skip" onclick="socket.emit('skip_order')">ข้าม Order</button>
-        <button class="again" onclick="socket.emit('call_again')">เรียกซ้ำ/คิวที่กรอก</button>
-        <button class="reset" onclick="socket.emit('reset')">รีเซ็ต</button>
+        <button class="again" onclick="handleAgain()">เรียกซ้ำ/คิวที่กรอก</button>
+        <button class="reset" onclick="handleReset()">รีเซ็ต</button>
     </div>
 </div>
 
 <script>
 const socket = io();
+const currentEl = document.getElementById("current");
+const lastEl = document.getElementById("last");
+const inputEl = document.getElementById("setQueue");
 
-function setQueue() {
-    const value = document.getElementById("setQueue").value.trim().toUpperCase();
+/* ==================================
+   1. ฟังก์ชันเรียกคิวถัดไป (แก้เลขไม่ขึ้น)
+   ================================== */
+function handleCallNext() {
+    const lastStr = lastEl.innerText;
+    const currentStr = currentEl.innerText;
+
+    // ถ้าคิวปัจจุบันยังไม่ถึงคิวล่าสุด ให้เลขขยับหลอกรอไว้เลย (Optimistic UI)
+    if (lastStr !== "--") {
+        const lastNum = parseInt(lastStr.substring(1));
+        const currentNum = currentStr === "--" ? 0 : parseInt(currentStr.substring(1));
+
+        if (currentNum < lastNum) {
+            const nextQ = "Q" + String(currentNum + 1).padStart(3, '0');
+            currentEl.innerText = nextQ; // เลขเปลี่ยนทันทีที่กด!
+        }
+    }
+    socket.emit('call_next');
+}
+
+/* ==================================
+   2. ฟังก์ชันเรียกซ้ำ หรือ เรียกคิวที่กรอก
+   ================================== */
+function handleAgain() {
+    const value = inputEl.value.trim().toUpperCase();
+    if (value !== "" && /^Q\d{3}$/.test(value)) {
+        // ถ้ามึงกรอกเลขไว้ ให้มันเรียกเลขนั้นเลย (ซ่อมบัคปุ่มมั่ว)
+        socket.emit("set_queue", { queue: value });
+        inputEl.value = "";
+    } else {
+        // ถ้าไม่ได้กรอก ให้เรียกซ้ำตัวเดิม
+        socket.emit('call_again');
+    }
+}
+
+/* ==================================
+   3. ฟังก์ชันตั้งค่าคิว (Set Queue)
+   ================================== */
+function handleSetQueue() {
+    const value = inputEl.value.trim().toUpperCase();
     if (!/^Q\d{3}$/.test(value)) {
         alert("กรุณากรอก Q001 - Q500");
         return;
     }
-    const num = parseInt(value.substring(1));
-    if (num < 1 || num > 500) {
-        alert("คิวต้องอยู่ระหว่าง Q001 ถึง Q500");
-        return;
-    }
     socket.emit("set_queue", { queue: value });
+    inputEl.value = "";
 }
 
+/* ==================================
+   4. ฟังก์ชันรีเซ็ต (ถามก่อนกันพลาด)
+   ================================== */
+function handleReset() {
+    if (confirm("ต้องการล้างคิวทั้งหมดใช่ไหม?")) {
+        socket.emit('reset');
+    }
+}
+
+/* ==================================
+   5. รับสัญญาณอัปเดตจาก Server
+   ================================== */
 socket.on("queue_updated", data => {
-    document.getElementById("last").innerText = data.last;
-    document.getElementById("current").innerText = data.current;
+    // อัปเดตเลขจริงจาก Server เพื่อให้ทุกหน้าจอตรงกัน
+    lastEl.innerText = data.last;
+    currentEl.innerText = data.current;
 });
 
+// รับสัญญาณตอนกดเรียก (เพื่อให้เลขหน้า Counter ซิงค์กับหน้า Display)
 socket.on("call_queue", data => {
-    document.getElementById("current").innerText = data.queue;
+    currentEl.innerText = data.queue;
 });
 </script>
 </body>
