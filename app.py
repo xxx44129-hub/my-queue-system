@@ -2,6 +2,7 @@ from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
 from gtts import gTTS
 import os
+import time  # เพิ่มมาเพื่อใช้ทำชื่อไฟล์ไม่ให้ซ้ำ
 
 # ====================
 # Flask + SocketIO Config
@@ -40,12 +41,15 @@ def queue_to_thai(queue):
     return " ".join(mapping.get(c, c) for c in queue)
 
 def generate_tts(text, filename_prefix):
-    filename = f"{filename_prefix}.mp3"
+    # แก้ไข: เพิ่ม timestamp เข้าไปในชื่อไฟล์เพื่อให้ Render สร้างไฟล์ใหม่ตลอด
+    # ป้องกันปัญหาไฟล์เก่าค้างหรือโดนลบแล้วหาไม่เจอ (ตัวการที่ทำให้ไม่มีเสียง)
+    ts = int(time.time())
+    filename = f"{filename_prefix}_{ts}.mp3"
     path = os.path.join(STATIC_DIR, filename)
 
-    if not os.path.exists(path):
-        gTTS(text=text, lang="th", slow=False).save(path)
-        os.chmod(path, 0o644)
+    # บังคับสร้างใหม่เสมอเพื่อความชัวร์ว่าเสียงมาแน่
+    gTTS(text=text, lang="th", slow=False).save(path)
+    os.chmod(path, 0o644)
 
     return f"/static/{filename}"
 
@@ -103,7 +107,8 @@ def call_next():
     if current_queue < last_queue:
         current_queue += 1
         q_text = format_queue(current_queue)
-        audio = generate_tts(queue_to_thai(q_text), q_text)
+        # แก้ไขข้อความให้นุ่มนวลขึ้นตามที่มึงต้องการ
+        audio = generate_tts(f"เชิญหมายเลข {queue_to_thai(q_text)} ค่ะ", q_text)
         emit("call_queue", { "queue": q_text, "audio": audio }, broadcast=True)
 
 @socketio.on("call_again")
@@ -111,7 +116,7 @@ def call_again():
     global current_queue
     if current_queue > 0:
         q_text = format_queue(current_queue)
-        audio = generate_tts(queue_to_thai(q_text), q_text)
+        audio = generate_tts(f"เชิญหมายเลข {queue_to_thai(q_text)} ค่ะ", q_text)
         emit("call_queue", { "queue": q_text, "audio": audio }, broadcast=True)
 
 @socketio.on("skip_order")
