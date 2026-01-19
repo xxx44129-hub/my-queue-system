@@ -39,7 +39,7 @@ body {
     to { transform: scale(1); opacity: 1; }
 }
 
-/* ปุ่มปลดล็อกเสียงสำหรับ iPhone */
+/* overlay ปลดล็อกเสียง */
 #unlock {
     position: fixed;
     inset: 0;
@@ -67,47 +67,54 @@ body {
 
 <script>
 /* =======================
-   ตั้งค่าการเชื่อมต่อ
+   setup
 ======================= */
 const socket = io();
 const queueEl = document.getElementById("queue");
 const unlock = document.getElementById("unlock");
+
 let unlocked = false;
 
 /* =======================
    ระบบเสียง (Web Speech API)
-   🎯 แก้ไข: เสียงผู้หญิงไทย (Kanya), พูดช้าลง 0.8
+   แก้ไข: เสียงผู้หญิงไทย (Kanya), พูดช้าลง 0.7 ตามสั่ง
 ======================= */
 function speak(text) {
     if (!unlocked) return;
 
-    // เคลียร์เสียงเก่าทิ้งทันที
+    // หยุดเสียงเก่าทันทีเพื่อกันเสียงซ้อน
     window.speechSynthesis.cancel();
 
     const msg = new SpeechSynthesisUtterance(text);
     msg.lang = 'th-TH';
-    msg.rate = 0.8; // 🎯 พูดช้าลงตามที่มึงสั่ง
+    msg.rate = 0.7; // 🎯 ปรับให้พูดช้าลงมากตามที่มึงสั่ง
     msg.pitch = 1.0;
 
-    // 🎯 บังคับเลือกเสียงผู้หญิงไทย (เน้น Kanya สำหรับ iPhone)
-    const voices = window.speechSynthesis.getVoices();
-    let femaleVoice = voices.find(v => v.lang === 'th-TH' && v.name.includes('Kanya'));
-    
-    if (!femaleVoice) {
-        femaleVoice = voices.find(v => v.lang === 'th-TH' && (v.name.includes('Female') || v.name.includes('Premium')));
-    }
-    
-    if (femaleVoice) {
-        msg.voice = femaleVoice;
-    }
+    // 🎯 เจาะจงเสียงผู้หญิงไทย (Kanya/Narisa สำหรับ iOS)
+    const selectVoice = () => {
+        const voices = window.speechSynthesis.getVoices();
+        let selectedVoice = voices.find(v => v.lang === 'th-TH' && (v.name.includes('Kanya') || v.name.includes('Narisa')));
+        
+        if (!selectedVoice) {
+            selectedVoice = voices.find(v => v.lang === 'th-TH' && (v.name.includes('Female') || v.name.includes('Premium') || v.name.includes('Google')));
+        }
+        
+        if (selectedVoice) {
+            msg.voice = selectedVoice;
+        }
+        window.speechSynthesis.speak(msg);
+    };
 
-    window.speechSynthesis.speak(msg);
+    // ป้องกันกรณี Voice ยังโหลดไม่เสร็จ
+    if (window.speechSynthesis.getVoices().length === 0) {
+        window.speechSynthesis.onvoiceschanged = selectVoice;
+    } else {
+        selectVoice();
+    }
 }
 
-// โหลดรายการเสียงสำหรับ Safari/Chrome
-if (speechSynthesis.onvoiceschanged !== undefined) {
-    speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
-}
+// โหลดรายการเสียง (สำหรับเบราว์เซอร์บางตัว)
+window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
 unlock.addEventListener("click", () => {
     unlocked = true;
@@ -116,24 +123,29 @@ unlock.addEventListener("click", () => {
 });
 
 /* =======================
-   รับสัญญาณจาก Server (app.py)
+   เรียกคิว (เลขเปลี่ยนทันที)
 ======================= */
 socket.on("call_queue", data => {
-    // อัปเดตเลขทันที
+    // อัปเดตตัวเลขบนจอ
     queueEl.innerText = data.queue;
     queueEl.style.animation = "none";
-    queueEl.offsetHeight; 
+    queueEl.offsetHeight; // force reflow
     queueEl.style.animation = "pop 0.4s ease-out";
-    
+
     // สั่งให้พูดรหัสคิว
     speak(data.msg);
 });
 
+/* =======================
+   ข้าม Order (พูดอย่างเดียว)
+======================= */
 socket.on("speak_only", data => {
-    // พูดประโยคข้ามคิว
     speak(data.msg);
 });
 
+/* =======================
+   อัปเดตหน้าจอปกติ
+======================= */
 socket.on("queue_updated", data => {
     if (data.current) {
         queueEl.innerText = data.current;
