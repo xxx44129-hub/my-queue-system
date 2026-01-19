@@ -1,61 +1,37 @@
 from flask import Flask, render_template
 from flask_socketio import SocketIO, emit
-from gtts import gTTS
 import os
-import time
 
 # ====================
-# Flask + SocketIO
+# Flask + SocketIO Setup
 # ====================
 app = Flask(__name__)
 app.config["SECRET_KEY"] = "queue-system-secret"
 
+# ใช้ eventlet เพื่อความเสถียรสูงสุดบน Render
 socketio = SocketIO(
     app,
     cors_allowed_origins="*",
-    async_mode="eventlet" # เปลี่ยนเพื่อให้รันบน Render ได้เสถียร
+    async_mode="eventlet"
 )
 
 # ====================
-# Global state
+# Global State
 # ====================
 last_queue = 0
 current_queue = 0
 
-STATIC_DIR = "static"
-os.makedirs(STATIC_DIR, exist_ok=True)
-
 # ====================
-# Helper functions (ต้นฉบับ 100%)
+# Helper Functions
 # ====================
 def format_queue(n):
     return f"Q{n:03d}"
-
-def queue_to_thai(queue):
-    mapping = {
-        "0": "ศูนย์", "1": "หนึ่ง", "2": "สอง", "3": "สาม", "4": "สี่",
-        "5": "ห้า", "6": "หก", "7": "เจ็ด", "8": "แปด", "9": "เก้า",
-        "Q": "คิว"
-    }
-    return " ".join(mapping.get(c, c) for c in queue)
-
-def generate_tts(text, filename_prefix):
-    # แก้ไข: ใส่เวลาปัจจุบันต่อท้ายชื่อไฟล์เพื่อให้ Render ยอมสร้างไฟล์ใหม่สดๆ
-    ts = int(time.time())
-    filename = f"{filename_prefix}_{ts}.mp3"
-    path = os.path.join(STATIC_DIR, filename)
-
-    # บังคับสร้างใหม่ 100% ไม่เช็คว่ามีไฟล์เก่าไหม เพื่อแก้บัคเสียงเงียบ
-    gTTS(text=text, lang="th", slow=False).save(path)
-    os.chmod(path, 0o644)
-
-    return f"/static/{filename}"
 
 # ====================
 # Routes
 # ====================
 @app.route("/")
-@app.route("/counter") # เพิ่มให้มึงเข้าได้ทั้งสองชื่อ จะได้ไม่เจอ 404
+@app.route("/counter")
 def counter():
     return render_template("counter.html")
 
@@ -64,7 +40,7 @@ def display():
     return render_template("display.html")
 
 # ====================
-# SocketIO events (ต้นฉบับมึง 100%)
+# SocketIO Events
 # ====================
 
 @socketio.on("set_queue")
@@ -80,6 +56,7 @@ def set_queue(data):
         if current_queue > last_queue:
             last_queue = current_queue
 
+        # ส่งสัญญาณอัปเดตเลขให้ทุกจอทันที
         emit("queue_updated", {
             "last": format_queue(last_queue),
             "current": format_queue(current_queue)
@@ -92,6 +69,7 @@ def new_queue():
     global last_queue
     if last_queue < 500:
         last_queue += 1
+    # อัปเดตฝั่งคนรับคิวใหม่
     emit("queue_updated", {
         "last": format_queue(last_queue),
         "current": format_queue(current_queue) if current_queue else "--"
@@ -103,20 +81,36 @@ def call_next():
     if current_queue < last_queue:
         current_queue += 1
         q_text = format_queue(current_queue)
-        audio = generate_tts(queue_to_thai(q_text), q_text)
-        emit("call_queue", { "queue": q_text, "audio": audio }, broadcast=True)
+        
+        # 🎯 แก้ปัญหาเลขดีเลย์: ส่งสัญญาณเดียวที่มีทั้งเลขและข้อความเสียง
+        # หน้า Display จะได้รับพร้อมกันและเปลี่ยนเลขทันที
+        emit("call_queue", { 
+            "queue": q_text, 
+            "msg": f"คิวที่ {current_queue} เชิญค่ะ" 
+        }, broadcast=True)
+        
+        # ส่งอัปเดตสถานะคิวทั่วไปด้วย
+        emit("queue_updated", {
+            "last": format_queue(last_queue),
+            "current": q_text
+        }, broadcast=True)
 
 @socketio.on("call_again")
 def call_again():
     if current_queue > 0:
         q_text = format_queue(current_queue)
-        audio = generate_tts(queue_to_thai(q_text), q_text)
-        emit("call_queue", { "queue": q_text, "audio": audio }, broadcast=True)
+        # เรียกซ้ำโดยส่งข้อความไปให้ Browser พูด
+        emit("call_queue", { 
+            "queue": q_text, 
+            "msg": f"เรียกซ้ำ คิวที่ {current_queue} เชิญค่ะ" 
+        }, broadcast=True)
 
 @socketio.on("skip_order")
 def skip_order():
-    audio = generate_tts("ขออนุญาตข้าม Order นะคะ", "skip_msg_original")
-    emit("speak_only", {"audio": audio}, broadcast=True)
+    # ส่งข้อความเสียงโดยไม่ต้องเปลี่ยนเลข
+    emit("speak_only", {
+        "msg": "ขออนุญาตข้าม ออร์เดอร์ นะคะ"
+    }, broadcast=True)
 
 @socketio.on("reset")
 def reset():
@@ -126,7 +120,7 @@ def reset():
     emit("queue_updated", {"last": "--", "current": "--"}, broadcast=True)
 
 # ====================
-# Main
+# Main execution
 # ====================
 if __name__ == "__main__":
     socketio.run(app)
