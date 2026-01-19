@@ -22,7 +22,7 @@ last_queue = 0
 current_queue = 0
 
 # ====================
-# Helper Functions
+# Helper Functions (คงไว้ 100% ตามต้นฉบับ)
 # ====================
 def format_queue(n):
     return f"Q{n:03d}"
@@ -82,14 +82,14 @@ def call_next():
         current_queue += 1
         q_text = format_queue(current_queue)
         
-        # 🎯 แก้ปัญหาเลขดีเลย์: ส่งสัญญาณเดียวที่มีทั้งเลขและข้อความเสียง
+        # 🎯 แก้ปัญหาเลขดีเลย์: ส่งสัญญาณเดียวที่มีรหัสคิวเพียวๆ (มึงสั่งให้อ่านแค่รหัส)
         # หน้า Display จะได้รับพร้อมกันและเปลี่ยนเลขทันที
         emit("call_queue", { 
             "queue": q_text, 
-            "msg": f"คิวที่ {current_queue} เชิญค่ะ" 
+            "msg": q_text 
         }, broadcast=True)
         
-        # ส่งอัปเดตสถานะคิวทั่วไปด้วย
+        # ส่งอัปเดตสถานะคิวทั่วไปด้วยเพื่อให้หน้าจออื่นเปลี่ยนตาม
         emit("queue_updated", {
             "last": format_queue(last_queue),
             "current": q_text
@@ -99,17 +99,17 @@ def call_next():
 def call_again():
     if current_queue > 0:
         q_text = format_queue(current_queue)
-        # เรียกซ้ำโดยส่งข้อความไปให้ Browser พูด
+        # เรียกซ้ำโดยส่งรหัสคิวไปให้ Browser พูดเพียวๆ
         emit("call_queue", { 
             "queue": q_text, 
-            "msg": f"เรียกซ้ำ คิวที่ {current_queue} เชิญค่ะ" 
+            "msg": q_text 
         }, broadcast=True)
 
 @socketio.on("skip_order")
 def skip_order():
     # ส่งข้อความเสียงโดยไม่ต้องเปลี่ยนเลข
     emit("speak_only", {
-        "msg": "ขออนุญาตข้าม ออร์เดอร์ นะคะ"
+        "msg": "ขออนุญาตข้ามออร์เดอร์ค่ะ"
     }, broadcast=True)
 
 @socketio.on("reset")
