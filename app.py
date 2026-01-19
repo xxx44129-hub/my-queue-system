@@ -1,154 +1,129 @@
-<!DOCTYPE html>
-<html lang="th">
-<head>
-<meta charset="utf-8">
-<title>Queue Display</title>
+from flask import Flask, render_template
+from flask_socketio import SocketIO, emit
+import os
+import time
 
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+# ====================
+# Flask + SocketIO Setup
+# ====================
+app = Flask(__name__)
+app.config["SECRET_KEY"] = "queue-system-secret"
 
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="Queue Display">
-<link rel="apple-touch-icon" href="/static/icon-512.png">
+# ใช้ eventlet เพื่อความเสถียรสูงสุดบน Render
+socketio = SocketIO(
+    app,
+    cors_allowed_origins="*",
+    async_mode="eventlet"
+)
 
-<style>
-body {
-    margin: 0;
-    font-family: "Segoe UI", Arial, sans-serif;
-    background: linear-gradient(135deg, #0f2027, #2c5364);
-    color: white;
-    height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-}
-.container { text-align: center; }
-.queue {
-    font-size: 240px;
-    font-weight: bold;
-    color: #ffd700;
-    text-shadow: 0 10px 20px rgba(0,0,0,0.5);
-    animation: pop 0.4s ease-out;
-}
-.subtitle { font-size: 42px; margin-top: 20px; }
+# ====================
+# Global State
+# ====================
+last_queue = 0
+current_queue = 0
 
-@keyframes pop {
-    from { transform: scale(0.5); opacity: 0; }
-    to { transform: scale(1); opacity: 1; }
-}
+# ====================
+# Helper Functions (กูเก็บไว้ครบตามต้นฉบับมึง)
+# ====================
+def format_queue(n):
+    return f"Q{n:03d}"
 
-/* overlay ปลดล็อกเสียง */
-#unlock {
-    position: fixed;
-    inset: 0;
-    background: black;
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 48px;
-    z-index: 9999;
-    text-align: center;
-    cursor: pointer;
-}
-</style>
-</head>
+# ====================
+# Routes
+# ====================
+@app.route("/")
+@app.route("/counter")
+def counter():
+    return render_template("counter.html")
 
-<body>
+@app.route("/display")
+def display():
+    return render_template("display.html")
 
-<div id="unlock">แตะหน้าจอหนึ่งครั้ง<br>เพื่อเริ่มระบบเสียง</div>
+# ====================
+# SocketIO Events
+# ====================
 
-<div class="container">
-    <div class="queue" id="queue">--</div>
-    <div class="subtitle">เมนูที่สั่งได้แล้วค่ะ</div>
-</div>
+@socketio.on("set_queue")
+def set_queue(data):
+    global current_queue, last_queue
+    try:
+        q = data.get("queue", "").upper().strip()
+        if not q.startswith("Q"): return
+        number = int(q[1:])
+        if number < 1 or number > 500: return
 
-<script>
-/* =======================
-   setup
-======================= */
-const socket = io();
-const queueEl = document.getElementById("queue");
-const unlock = document.getElementById("unlock");
+        current_queue = number
+        if current_queue > last_queue:
+            last_queue = current_queue
 
-let unlocked = false;
+        # ส่งสัญญาณอัปเดตเลขให้ทุกจอทันที
+        emit("queue_updated", {
+            "last": format_queue(last_queue),
+            "current": format_queue(current_queue)
+        }, broadcast=True)
+    except:
+        pass
 
-/* =======================
-   ระบบเสียงใหม่ (Web Speech API)
-   แก้ไข: เสียงผู้หญิงไทย, ไม่พูดคำว่า "คิวที่/เชิญค่ะ"
-======================= */
-function speak(text) {
-    if (!unlocked) return;
+@socketio.on("new_queue")
+def new_queue():
+    global last_queue
+    if last_queue < 500:
+        last_queue += 1
+    # อัปเดตฝั่งคนรับคิวใหม่
+    emit("queue_updated", {
+        "last": format_queue(last_queue),
+        "current": format_queue(current_queue) if current_queue else "--"
+    }, broadcast=True)
 
-    // หยุดเสียงเก่าทันทีถ้ามีการกดเรียกซ้อน
-    window.speechSynthesis.cancel();
+@socketio.on("call_next")
+def call_next():
+    global current_queue
+    if current_queue < last_queue:
+        current_queue += 1
+        q_text = format_queue(current_queue)
+        
+        # 🎯 แก้เลขดีเลย์: ส่งสัญญาณที่มีทั้งเลขและเสียง (รหัสคิวเพียวๆ) ไปพร้อมกัน
+        emit("call_queue", { 
+            "queue": q_text, 
+            "msg": q_text 
+        }, broadcast=True)
+        
+        # อัปเดตตัวเลขหน้าเคาน์เตอร์ให้ตรงกัน
+        emit("queue_updated", {
+            "last": format_queue(last_queue),
+            "current": q_text
+        }, broadcast=True)
 
-    const msg = new SpeechSynthesisUtterance(text);
-    msg.lang = 'th-TH';
-    msg.rate = 0.9; // ความเร็วค่อนข้างปกติ ไม่เร็วเกินไป
-    msg.pitch = 1.0;
+@socketio.on("call_again")
+def call_again():
+    if current_queue > 0:
+        q_text = format_queue(current_queue)
+        # เรียกซ้ำ อ่านแค่รหัสคิว
+        emit("call_queue", { 
+            "queue": q_text, 
+            "msg": q_text 
+        }, broadcast=True)
 
-    // ค้นหาเสียงผู้หญิงไทย
-    const voices = window.speechSynthesis.getVoices();
-    const femaleVoice = voices.find(v => 
-        v.lang === 'th-TH' && (v.name.includes('Premium') || v.name.includes('Google') || v.name.includes('Female'))
-    );
-    
-    if (femaleVoice) {
-        msg.voice = femaleVoice;
-    }
+@socketio.on("skip_order")
+def skip_order():
+    # 🎯 แก้ไขประโยคตามที่มึงขอ: "ขออนุญาตข้ามคิวนะคะ"
+    emit("speak_only", {
+        "msg": "ขออนุญาตข้ามคิวนะคะ"
+    }, broadcast=True)
 
-    window.speechSynthesis.speak(msg);
-}
+@socketio.on("reset")
+def reset():
+    global last_queue, current_queue
+    last_queue = 0
+    current_queue = 0
+    emit("queue_updated", {"last": "--", "current": "--"}, broadcast=True)
 
-// โหลดรายการเสียง (จำเป็นสำหรับ Chrome/Safari)
-window.speechSynthesis.onvoiceschanged = () => {
-    window.speechSynthesis.getVoices();
-};
-
-unlock.addEventListener("click", () => {
-    unlocked = true;
-    unlock.style.display = "none";
-    speak("เริ่มระบบค่ะ");
-});
-
-/* =======================
-   เรียกคิว (แก้ให้ Real-Time เลขเปลี่ยนทันที)
-======================= */
-socket.on("call_queue", data => {
-    // 🎯 1. อัปเดตตัวเลขบนจอทันที (แก้อาการดีเลย์ 1 ตำแหน่ง)
-    queueEl.innerText = data.queue;
-    queueEl.style.animation = "none";
-    queueEl.offsetHeight; // force reflow
-    queueEl.style.animation = "pop 0.4s ease-out";
-
-    // 🎯 2. สั่งให้พูด (data.msg จาก app.py จะส่งมาแค่รหัสคิวเพียวๆ)
-    speak(data.msg);
-});
-
-/* =======================
-   ข้ามออร์เดอร์
-======================= */
-socket.on("speak_only", data => {
-    speak(data.msg);
-});
-
-/* =======================
-   อัปเดตหน้าจอปกติ (เช่น Reset หรือ อัปเดตจากจออื่น)
-======================= */
-socket.on("queue_updated", data => {
-    if (data.current) {
-        queueEl.innerText = data.current;
-        // ถ้าเลขเปลี่ยน ให้ใส่แอนิเมชั่นด้วย
-        if (data.current !== "--") {
-            queueEl.style.animation = "none";
-            queueEl.offsetHeight;
-            queueEl.style.animation = "pop 0.4s ease-out";
-        }
-    }
-});
-</script>
-
-</body>
-</html>
+# ====================
+# Main execution
+# ====================
+if __name__ == "__main__":
+    # เช็คโฟลเดอร์ static ตามต้นฉบับเดิม
+    if not os.path.exists("static"):
+        os.makedirs("static")
+    socketio.run(app)
