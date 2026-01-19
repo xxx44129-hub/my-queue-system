@@ -71,47 +71,47 @@ const unlock = document.getElementById("unlock");
 let unlocked = false;
 
 /* =======================
-   ระบบเลือกเสียงผู้หญิงแบบบังคับเจาะจง
+   ระบบเสียง (แก้เฉพาะตรงนี้)
 ======================= */
 function getBestFemaleThaiVoice() {
     const voices = window.speechSynthesis.getVoices();
-    // เรียงลำดับความเพราะ: Google (ผู้หญิง) -> Kanya (iOS) -> Narisa (iOS) -> Pattara (Windows)
-    const femaleKeywords = ['Google ภาษาไทย', 'Kanya', 'Narisa', 'Pattara', 'Female', 'Premium', 'Microsoft Premere'];
-    const thaiVoices = voices.filter(v => v.lang.startsWith('th'));
+    const thaiVoices = voices.filter(v => v.lang && v.lang.startsWith("th"));
 
-    for (let kw of femaleKeywords) {
-        let found = thaiVoices.find(v => v.name.includes(kw));
+    // เรียงลำดับความเป็นผู้หญิงก่อน
+    const priority = [
+        v => /Google/i.test(v.name) && /Female|ผู้หญิง/i.test(v.name),
+        v => /Kanya|Narisa/i.test(v.name),
+        v => /Female/i.test(v.name),
+        v => true
+    ];
+
+    for (let rule of priority) {
+        const found = thaiVoices.find(rule);
         if (found) return found;
     }
-    // ถ้าไม่เจอตามชื่อ ให้เอาอันที่มีคำว่า "Female" หรือถ้าไม่มีจริงๆ เอาอันสุดท้ายในลิสต์ภาษาไทย
-    return thaiVoices.length > 0 ? thaiVoices[thaiVoices.length - 1] : null;
+    return null;
 }
 
 function speak(text) {
     if (!unlocked) return;
 
-    // หยุดเสียงเก่าก่อนเริ่มใหม่
     window.speechSynthesis.cancel();
 
-    // สร้างคำพูดใหม่
     const speakTask = () => {
         const msg = new SpeechSynthesisUtterance(text);
         msg.lang = 'th-TH';
-        msg.rate = 0.6;   // 🎯 ปรับให้ช้าลงมาก (จาก 0.65 เป็น 0.6) เพื่อความชัดเจน
-        msg.pitch = 1.1;  // ปรับโทนแหลมขึ้นนิดหน่อยให้เป็นเสียงผู้หญิง
+        msg.rate = 0.6;
+        msg.pitch = 1.15;
 
         const selectedVoice = getBestFemaleThaiVoice();
         if (selectedVoice) {
             msg.voice = selectedVoice;
             console.log("ใช้เสียง:", selectedVoice.name);
-        } else {
-            console.log("ยังหาเสียงผู้หญิงไม่เจอ กำลังรอ...");
         }
 
         window.speechSynthesis.speak(msg);
     };
 
-    // ป้องกันกรณีรายการเสียงยังไม่ถูกโหลด
     if (window.speechSynthesis.getVoices().length === 0) {
         window.speechSynthesis.onvoiceschanged = speakTask;
     } else {
@@ -119,7 +119,7 @@ function speak(text) {
     }
 }
 
-// โหลดเสียงล่วงหน้าทันทีที่เปิดเว็บ
+// preload voices
 window.speechSynthesis.getVoices();
 if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
@@ -132,7 +132,7 @@ unlock.addEventListener("click", () => {
 });
 
 /* =======================
-   Socket.IO Events
+   Socket.IO Events (เดิมทั้งหมด)
 ======================= */
 socket.on("call_queue", data => {
     queueEl.innerText = data.queue;
