@@ -3,9 +3,7 @@
 <head>
 <meta charset="utf-8">
 <title>Queue Display</title>
-
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -32,13 +30,10 @@ body {
     animation: pop 0.4s ease-out;
 }
 .subtitle { font-size: 42px; margin-top: 20px; }
-
 @keyframes pop {
     from { transform: scale(0.5); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
 }
-
-/* overlay ปลดล็อกเสียง */
 #unlock {
     position: fixed;
     inset: 0;
@@ -56,119 +51,62 @@ body {
 </head>
 
 <body>
-
-<div id="unlock">แตะหน้าจอหนึ่งครั้ง<br>เพื่อเริ่มระบบเสียง</div>
+<div id="unlock">แตะหน้าจอหนึ่งครั้ง<br>เพื่อเปิดระบบเสียงแบบ Real-time</div>
 
 <div class="container">
     <div class="queue" id="queue">--</div>
     <div class="subtitle">เมนูที่สั่งได้แล้วค่ะ</div>
 </div>
 
-<audio id="player" preload="auto"></audio>
-
 <script>
-/* =======================
-   setup
-======================= */
 const socket = io();
-const player = document.getElementById("player");
-const unlock = document.getElementById("unlock");
 const queueEl = document.getElementById("queue");
-
+const unlock = document.getElementById("unlock");
 let unlocked = false;
-let audioQueue = []; // เพิ่มระบบคิวเสียงเพื่อแก้เสียงทับกัน
-let isAudioProcessing = false;
 
-/* =======================
-   ปลดล็อกเสียง (iOS SAFE)
-======================= */
-function unlockAudio() {
-    if (unlocked) return;
-
-    player.src = "/static/beep.mp3";
-    player.play().then(() => {
-        player.pause();
-        player.currentTime = 0;
-        unlocked = true;
-        unlock.style.display = "none";
-        console.log("Audio unlocked");
-    }).catch(err => {
-        console.log("Unlock failed", err);
-    });
+/* ==================================
+   ระบบเสียงใหม่: พูดจากข้อความ (ไม่ต้องใช้ไฟล์)
+   ================================== */
+function speak(text) {
+    if (!unlocked) return;
+    // ตัดเสียงที่กำลังพูดอยู่ทิ้งเพื่อพูดอันใหม่ทันที
+    window.speechSynthesis.cancel(); 
+    const msg = new SpeechSynthesisUtterance(text);
+    msg.lang = 'th-TH'; // ตั้งเป็นภาษาไทย
+    msg.rate = 1.0;     // ความเร็วปกติ
+    window.speechSynthesis.speak(msg);
 }
 
-unlock.addEventListener("click", unlockAudio);
+unlock.addEventListener("click", () => {
+    unlocked = true;
+    unlock.style.display = "none";
+    // ทดสอบเสียงตอนเริ่ม
+    speak("เริ่มระบบเรียบร้อยค่ะ");
+});
 
-/* =======================
-   ระบบเล่นเสียงทีละอันตามลำดับ (แก้เสียงหาย)
-======================= */
-function processAudioQueue() {
-    if (audioQueue.length === 0) {
-        isAudioProcessing = false;
-        return;
-    }
-
-    isAudioProcessing = true;
-    const nextSrc = audioQueue.shift();
-    
-    // ใส่ timestamp ป้องกัน Browser จำเสียงเก่า (Cache)
-    player.src = nextSrc.includes('?') ? nextSrc : nextSrc + "?v=" + new Date().getTime();
-    
-    player.play().catch(err => {
-        console.log("Play error, skipping...", err);
-        processAudioQueue();
-    });
-
-    player.onended = () => {
-        processAudioQueue();
-    };
-}
-
-/* =======================
-   เรียกคิว (แก้ให้ Real-Time เลขเปลี่ยนทันที)
-======================= */
+/* ==================================
+   รับสัญญาณเรียกคิว (แก้เลขดีเลย์)
+   ================================== */
 socket.on("call_queue", data => {
-    // 🎯 1. อัปเดตตัวเลขบนจอทันที ไม่ต้องรอเสียงจบ
+    // 🎯 เปลี่ยนเลขทันทีที่ได้รับสัญญาณ
     queueEl.innerText = data.queue;
     queueEl.style.animation = "none";
-    queueEl.offsetHeight; // force reflow ให้ animation เล่นใหม่
+    queueEl.offsetHeight; 
     queueEl.style.animation = "pop 0.4s ease-out";
-
-    // 🎯 2. จัดการเรื่องเสียงเข้าคิวรอเล่น
-    if (unlocked) {
-        audioQueue.push("/static/beep.mp3");
-        audioQueue.push(data.audio);
-        if (!isAudioProcessing) processAudioQueue();
-    }
+    
+    // 🎯 สั่งให้ Browser พูดข้อความที่ Server ส่งมา
+    speak(data.msg);
 });
 
-/* =======================
-   ข้ามออร์เดอร์
-======================= */
 socket.on("speak_only", data => {
-    if (unlocked) {
-        audioQueue.push("/static/beep.mp3");
-        audioQueue.push(data.audio);
-        if (!isAudioProcessing) processAudioQueue();
-    }
+    speak(data.msg);
 });
 
-/* =======================
-   อัปเดตหน้าจอปกติ (แก้ให้รับเลขจากเคาน์เตอร์ได้ทุกกรณี)
-======================= */
 socket.on("queue_updated", data => {
-    // แก้ไข: ให้มันเปลี่ยนเลขตามที่ได้รับมาเลย ไม่ใช่รอแค่ตอน Reset เป็น --
     if (data.current) {
         queueEl.innerText = data.current;
-        // แถมอนิเมชั่นให้ด้วยถ้าเลขเปลี่ยน
-        if (data.current !== "--") {
-            queueEl.style.animation = "none";
-            queueEl.offsetHeight;
-            queueEl.style.animation = "pop 0.4s ease-out";
-        }
     }
 });
 </script>
-
 </body>
 </html>
