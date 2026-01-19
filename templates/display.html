@@ -3,7 +3,9 @@
 <head>
 <meta charset="utf-8">
 <title>Queue Display</title>
+
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black">
@@ -20,6 +22,7 @@ body {
     display: flex;
     justify-content: center;
     align-items: center;
+    overflow: hidden;
 }
 .container { text-align: center; }
 .queue {
@@ -30,10 +33,13 @@ body {
     animation: pop 0.4s ease-out;
 }
 .subtitle { font-size: 42px; margin-top: 20px; }
+
 @keyframes pop {
     from { transform: scale(0.5); opacity: 0; }
     to { transform: scale(1); opacity: 1; }
 }
+
+/* overlay ปลดล็อกเสียง */
 #unlock {
     position: fixed;
     inset: 0;
@@ -51,7 +57,8 @@ body {
 </head>
 
 <body>
-<div id="unlock">แตะหน้าจอหนึ่งครั้ง<br>เพื่อเปิดระบบเสียงแบบ Real-time</div>
+
+<div id="unlock">แตะหน้าจอหนึ่งครั้ง<br>เพื่อเริ่มระบบเสียง</div>
 
 <div class="container">
     <div class="queue" id="queue">--</div>
@@ -59,54 +66,94 @@ body {
 </div>
 
 <script>
+/* =======================
+   setup
+======================= */
 const socket = io();
 const queueEl = document.getElementById("queue");
 const unlock = document.getElementById("unlock");
+
 let unlocked = false;
 
-/* ==================================
-   ระบบเสียงใหม่: พูดจากข้อความ (ไม่ต้องใช้ไฟล์)
-   ================================== */
+/* =======================
+   ระบบเสียง (Web Speech API)
+======================= */
 function speak(text) {
     if (!unlocked) return;
-    // ตัดเสียงที่กำลังพูดอยู่ทิ้งเพื่อพูดอันใหม่ทันที
-    window.speechSynthesis.cancel(); 
+
+    // หยุดเสียงเก่าทันทีเพื่อกันเสียงซ้อน
+    window.speechSynthesis.cancel();
+
     const msg = new SpeechSynthesisUtterance(text);
-    msg.lang = 'th-TH'; // ตั้งเป็นภาษาไทย
-    msg.rate = 1.0;     // ความเร็วปกติ
+    msg.lang = 'th-TH';
+    msg.rate = 0.9; // ความเร็วปกติ
+    msg.pitch = 1.0;
+
+    // ค้นหาเสียงผู้หญิงไทยในเครื่อง (รองรับทั้ง iOS/Android)
+    const voices = window.speechSynthesis.getVoices();
+    const femaleVoice = voices.find(v => 
+        v.lang === 'th-TH' && (
+            v.name.includes('Premium') || 
+            v.name.includes('Google') || 
+            v.name.includes('Female') ||
+            v.name.includes('Kanya') || 
+            v.name.includes('Narisa')
+        )
+    );
+    
+    if (femaleVoice) {
+        msg.voice = femaleVoice;
+    }
+
     window.speechSynthesis.speak(msg);
+}
+
+// โหลดรายการเสียง (สำหรับเบราว์เซอร์บางตัวที่โหลดช้า)
+if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 }
 
 unlock.addEventListener("click", () => {
     unlocked = true;
     unlock.style.display = "none";
-    // ทดสอบเสียงตอนเริ่ม
-    speak("เริ่มระบบเรียบร้อยค่ะ");
+    speak("เริ่มระบบค่ะ");
 });
 
-/* ==================================
-   รับสัญญาณเรียกคิว (แก้เลขดีเลย์)
-   ================================== */
+/* =======================
+   เรียกคิว (เลขเปลี่ยนทันที)
+======================= */
 socket.on("call_queue", data => {
-    // 🎯 เปลี่ยนเลขทันทีที่ได้รับสัญญาณ
+    // อัปเดตตัวเลขบนจอ
     queueEl.innerText = data.queue;
     queueEl.style.animation = "none";
     queueEl.offsetHeight; 
     queueEl.style.animation = "pop 0.4s ease-out";
-    
-    // 🎯 สั่งให้ Browser พูดข้อความที่ Server ส่งมา
+
+    // พูดตามข้อความที่ส่งมา (ซึ่งใน app.py ใหม่จะส่งแค่รหัสคิว)
     speak(data.msg);
 });
 
+/* =======================
+   ข้ามออร์เดอร์ (พูดอย่างเดียว)
+======================= */
 socket.on("speak_only", data => {
     speak(data.msg);
 });
 
+/* =======================
+   อัปเดตหน้าจอปกติ (เช่น Reset หรือกดจากหน้า Counter)
+======================= */
 socket.on("queue_updated", data => {
     if (data.current) {
         queueEl.innerText = data.current;
+        if (data.current !== "--") {
+            queueEl.style.animation = "none";
+            queueEl.offsetHeight;
+            queueEl.style.animation = "pop 0.4s ease-out";
+        }
     }
 });
 </script>
+
 </body>
 </html>
