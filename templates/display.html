@@ -154,11 +154,18 @@ socket.on("speak_only", data => {
 });
 
 /* =======================
-   อัปเดตหน้าจอปกติ (เช่น Reset)
+   อัปเดตหน้าจอปกติ (แก้ให้รับเลขจากเคาน์เตอร์ได้ทุกกรณี)
 ======================= */
 socket.on("queue_updated", data => {
-    if (data.current === "--") {
-        queueEl.innerText = "--";
+    // แก้ไข: ให้มันเปลี่ยนเลขตามที่ได้รับมาเลย ไม่ใช่รอแค่ตอน Reset เป็น --
+    if (data.current) {
+        queueEl.innerText = data.current;
+        // แถมอนิเมชั่นให้ด้วยถ้าเลขเปลี่ยน
+        if (data.current !== "--") {
+            queueEl.style.animation = "none";
+            queueEl.offsetHeight;
+            queueEl.style.animation = "pop 0.4s ease-out";
+        }
     }
 });
 </script>
