@@ -39,7 +39,7 @@ body {
     to { transform: scale(1); opacity: 1; }
 }
 
-/* overlay ปลดล็อกเสียง */
+/* ปุ่มปลดล็อกเสียงสำหรับเบราว์เซอร์ (iPhone/Chrome) */
 #unlock {
     position: fixed;
     inset: 0;
@@ -67,54 +67,59 @@ body {
 
 <script>
 /* =======================
-   setup
+   เริ่มต้นการทำงาน
 ======================= */
 const socket = io();
 const queueEl = document.getElementById("queue");
 const unlock = document.getElementById("unlock");
-
 let unlocked = false;
 
 /* =======================
    ระบบเสียง (Web Speech API)
-   แก้ไข: เสียงผู้หญิงไทย (Kanya), พูดช้าลง 0.7 ตามสั่ง
+   🎯 แก้ไข: บังคับเสียงผู้หญิงไทยทุกระบบ, พูดช้าลง 0.65
 ======================= */
+function getBestFemaleThaiVoice() {
+    const voices = window.speechSynthesis.getVoices();
+    
+    // รายชื่อเสียงผู้หญิงไทยจากค่ายต่างๆ (Apple, Microsoft, Google)
+    const femaleKeywords = ['Kanya', 'Narisa', 'Pattara', 'Female', 'Google ภาษาไทย', 'Premium', 'Microsoft Premere'];
+    
+    // กรองเอาเฉพาะภาษาไทย
+    const thaiVoices = voices.filter(v => v.lang.startsWith('th'));
+
+    // ค้นหาตามลำดับความนุ่มนวล
+    for (let kw of femaleKeywords) {
+        let found = thaiVoices.find(v => v.name.includes(kw));
+        if (found) return found;
+    }
+
+    // ถ้าไม่เจอตามชื่อ ให้เอาเสียงภาษาไทยอันสุดท้ายที่มีในเครื่อง (มักเป็นเสียงคุณภาพสูง)
+    return thaiVoices.length > 0 ? thaiVoices[thaiVoices.length - 1] : null;
+}
+
 function speak(text) {
     if (!unlocked) return;
 
-    // หยุดเสียงเก่าทันทีเพื่อกันเสียงซ้อน
+    // หยุดเสียงเก่าทันทีเพื่อไม่ให้พูดซ้อนกัน
     window.speechSynthesis.cancel();
 
     const msg = new SpeechSynthesisUtterance(text);
     msg.lang = 'th-TH';
-    msg.rate = 0.7; // 🎯 ปรับให้พูดช้าลงมากตามที่มึงสั่ง
-    msg.pitch = 1.0;
+    msg.rate = 0.65; // 🎯 ปรับให้พูดช้าลงตามที่มึงสั่ง
+    msg.pitch = 1.1;  // ปรับโทนให้ดูเป็นผู้หญิงและสุภาพขึ้น
 
-    // 🎯 เจาะจงเสียงผู้หญิงไทย (Kanya/Narisa สำหรับ iOS)
-    const selectVoice = () => {
-        const voices = window.speechSynthesis.getVoices();
-        let selectedVoice = voices.find(v => v.lang === 'th-TH' && (v.name.includes('Kanya') || v.name.includes('Narisa')));
-        
-        if (!selectedVoice) {
-            selectedVoice = voices.find(v => v.lang === 'th-TH' && (v.name.includes('Female') || v.name.includes('Premium') || v.name.includes('Google')));
-        }
-        
-        if (selectedVoice) {
-            msg.voice = selectedVoice;
-        }
-        window.speechSynthesis.speak(msg);
-    };
-
-    // ป้องกันกรณี Voice ยังโหลดไม่เสร็จ
-    if (window.speechSynthesis.getVoices().length === 0) {
-        window.speechSynthesis.onvoiceschanged = selectVoice;
-    } else {
-        selectVoice();
+    const selectedVoice = getBestFemaleThaiVoice();
+    if (selectedVoice) {
+        msg.voice = selectedVoice;
     }
+
+    window.speechSynthesis.speak(msg);
 }
 
-// โหลดรายการเสียง (สำหรับเบราว์เซอร์บางตัว)
-window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+// โหลดรายการเสียงเตรียมไว้สำหรับเบราว์เซอร์ที่โหลดช้า
+if (speechSynthesis.onvoiceschanged !== undefined) {
+    speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+}
 
 unlock.addEventListener("click", () => {
     unlocked = true;
@@ -123,29 +128,29 @@ unlock.addEventListener("click", () => {
 });
 
 /* =======================
-   เรียกคิว (เลขเปลี่ยนทันที)
+   Socket.IO Events (รับสัญญาณจาก app.py)
 ======================= */
+
+// เรียกคิว (เลขเปลี่ยนพร้อมเสียงพูด)
 socket.on("call_queue", data => {
-    // อัปเดตตัวเลขบนจอ
+    // อัปเดตตัวเลข
     queueEl.innerText = data.queue;
+    
+    // รีเซ็ตแอนิเมชั่น
     queueEl.style.animation = "none";
-    queueEl.offsetHeight; // force reflow
+    queueEl.offsetHeight; 
     queueEl.style.animation = "pop 0.4s ease-out";
 
-    // สั่งให้พูดรหัสคิว
+    // สั่งพูด (รหัสคิว)
     speak(data.msg);
 });
 
-/* =======================
-   ข้าม Order (พูดอย่างเดียว)
-======================= */
+// ข้ามออร์เดอร์ หรือแจ้งเตือน (พูดอย่างเดียว)
 socket.on("speak_only", data => {
     speak(data.msg);
 });
 
-/* =======================
-   อัปเดตหน้าจอปกติ
-======================= */
+// อัปเดตหน้าจอทั่วไป (เช่น Reset หรือเปลี่ยนเลขจากเครื่องอื่น)
 socket.on("queue_updated", data => {
     if (data.current) {
         queueEl.innerText = data.current;
