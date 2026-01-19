@@ -25,14 +25,19 @@ body {
     overflow: hidden;
 }
 .container { text-align: center; }
+
 .queue {
-    font-size: 240px;
+    font-size: clamp(96px, 22vw, 240px); /* ✅ responsive */
     font-weight: bold;
     color: #ffd700;
     text-shadow: 0 10px 20px rgba(0,0,0,0.5);
     animation: pop 0.4s ease-out;
 }
-.subtitle { font-size: 42px; margin-top: 20px; }
+
+.subtitle {
+    font-size: clamp(20px, 4.5vw, 42px); /* ✅ responsive */
+    margin-top: 20px;
+}
 
 @keyframes pop {
     from { transform: scale(0.5); opacity: 0; }
@@ -71,13 +76,12 @@ const unlock = document.getElementById("unlock");
 let unlocked = false;
 
 /* =======================
-   ระบบเสียง (แก้เฉพาะตรงนี้)
+   ระบบเสียง (แก้เฉพาะ rate)
 ======================= */
 function getBestFemaleThaiVoice() {
     const voices = window.speechSynthesis.getVoices();
     const thaiVoices = voices.filter(v => v.lang && v.lang.startsWith("th"));
 
-    // เรียงลำดับความเป็นผู้หญิงก่อน
     const priority = [
         v => /Google/i.test(v.name) && /Female|ผู้หญิง/i.test(v.name),
         v => /Kanya|Narisa/i.test(v.name),
@@ -100,7 +104,7 @@ function speak(text) {
     const speakTask = () => {
         const msg = new SpeechSynthesisUtterance(text);
         msg.lang = 'th-TH';
-        msg.rate = 0.6;
+        msg.rate = 0.85;   /* ✅ เร็วขึ้น */
         msg.pitch = 1.15;
 
         const selectedVoice = getBestFemaleThaiVoice();
@@ -119,7 +123,6 @@ function speak(text) {
     }
 }
 
-// preload voices
 window.speechSynthesis.getVoices();
 if (speechSynthesis.onvoiceschanged !== undefined) {
     speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
