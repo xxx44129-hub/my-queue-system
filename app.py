@@ -57,11 +57,8 @@ def set_queue(data):
         if current_queue > last_queue:
             last_queue = current_queue
 
-        # ส่งสัญญาณอัปเดตเลขให้ทุกจอทันที
-        emit("queue_updated", {
-            "last": format_queue(last_queue),
-            "current": format_queue(current_queue)
-        }, broadcast=True)
+        # ❌ ไม่ emit queue_updated
+        # ตั้งค่าเลขไว้เฉย ๆ
     except:
         pass
 
@@ -83,13 +80,13 @@ def call_next():
         current_queue += 1
         q_text = format_queue(current_queue)
         
-        # 🎯 ส่งสัญญาณเรียกคิว: ส่งเลขและข้อความที่จะพูดพร้อมกัน
+        # 🎯 ส่งสัญญาณเรียกคิว: เลข + เสียงพร้อมกัน
         emit("call_queue", { 
             "queue": q_text, 
             "msg": q_text 
         }, broadcast=True)
         
-        # อัปเดตสถานะตัวเลขทั่วไป
+        # อัปเดตสถานะตัวเลข
         emit("queue_updated", {
             "last": format_queue(last_queue),
             "current": q_text
