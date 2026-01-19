@@ -23,7 +23,7 @@ last_queue = 0
 current_queue = 0
 
 # ====================
-# Helper Functions (กูเก็บไว้ครบตามต้นฉบับมึง)
+# Helper Functions (คงไว้ 100% ตามต้นฉบับมึง)
 # ====================
 def format_queue(n):
     return f"Q{n:03d}"
@@ -83,13 +83,13 @@ def call_next():
         current_queue += 1
         q_text = format_queue(current_queue)
         
-        # 🎯 แก้เลขดีเลย์: ส่งสัญญาณที่มีทั้งเลขและเสียง (รหัสคิวเพียวๆ) ไปพร้อมกัน
+        # 🎯 ส่งสัญญาณเรียกคิว: ส่งเลขและข้อความที่จะพูดพร้อมกัน
         emit("call_queue", { 
             "queue": q_text, 
             "msg": q_text 
         }, broadcast=True)
         
-        # อัปเดตตัวเลขหน้าเคาน์เตอร์ให้ตรงกัน
+        # อัปเดตสถานะตัวเลขทั่วไป
         emit("queue_updated", {
             "last": format_queue(last_queue),
             "current": q_text
@@ -99,7 +99,7 @@ def call_next():
 def call_again():
     if current_queue > 0:
         q_text = format_queue(current_queue)
-        # เรียกซ้ำ อ่านแค่รหัสคิว
+        # เรียกซ้ำโดยส่งรหัสคิวไปให้พูด
         emit("call_queue", { 
             "queue": q_text, 
             "msg": q_text 
@@ -107,9 +107,9 @@ def call_again():
 
 @socketio.on("skip_order")
 def skip_order():
-    # 🎯 แก้ไขประโยคตามที่มึงขอ: "ขออนุญาตข้ามคิวนะคะ"
+    # 🎯 เปลี่ยนเป็น "ขออนุญาตข้าม Order นะคะ" ตามที่มึงสั่ง
     emit("speak_only", {
-        "msg": "ขออนุญาตข้ามคิวนะคะ"
+        "msg": "ขออนุญาตข้ามออเดอร์นะคะ"
     }, broadcast=True)
 
 @socketio.on("reset")
@@ -123,7 +123,7 @@ def reset():
 # Main execution
 # ====================
 if __name__ == "__main__":
-    # เช็คโฟลเดอร์ static ตามต้นฉบับเดิม
+    # ตรวจสอบโฟลเดอร์ static ตามโครงสร้างเดิมมึง
     if not os.path.exists("static"):
         os.makedirs("static")
     socketio.run(app)
