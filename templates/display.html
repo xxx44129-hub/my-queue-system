@@ -27,7 +27,7 @@ body {
 .container { text-align: center; }
 
 .queue {
-    font-size: clamp(96px, 22vw, 240px); /* ✅ responsive */
+    font-size: clamp(96px, 22vw, 240px);
     font-weight: bold;
     color: #ffd700;
     text-shadow: 0 10px 20px rgba(0,0,0,0.5);
@@ -35,7 +35,7 @@ body {
 }
 
 .subtitle {
-    font-size: clamp(20px, 4.5vw, 42px); /* ✅ responsive */
+    font-size: clamp(20px, 4.5vw, 42px);
     margin-top: 20px;
 }
 
@@ -76,12 +76,13 @@ const unlock = document.getElementById("unlock");
 let unlocked = false;
 
 /* =======================
-   ระบบเสียง (แก้เฉพาะ rate)
+   ระบบเสียง (แก้ไขให้ช้าลงและเป็นผู้หญิง)
 ======================= */
 function getBestFemaleThaiVoice() {
     const voices = window.speechSynthesis.getVoices();
     const thaiVoices = voices.filter(v => v.lang && v.lang.startsWith("th"));
 
+    // ลำดับความสำคัญของเสียงผู้หญิงไทย
     const priority = [
         v => /Google/i.test(v.name) && /Female|ผู้หญิง/i.test(v.name),
         v => /Kanya|Narisa/i.test(v.name),
@@ -104,13 +105,12 @@ function speak(text) {
     const speakTask = () => {
         const msg = new SpeechSynthesisUtterance(text);
         msg.lang = 'th-TH';
-        msg.rate = 0.85;   /* ✅ เร็วขึ้น */
-        msg.pitch = 1.15;
+        msg.rate = 0.65;   // 🎯 แก้ไข: ปรับให้พูดช้าลงตามที่มึงสั่ง
+        msg.pitch = 1.1;   // ปรับโทนให้ดูเป็นผู้หญิง
 
         const selectedVoice = getBestFemaleThaiVoice();
         if (selectedVoice) {
             msg.voice = selectedVoice;
-            console.log("ใช้เสียง:", selectedVoice.name);
         }
 
         window.speechSynthesis.speak(msg);
