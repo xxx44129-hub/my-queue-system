@@ -57,8 +57,11 @@ def set_queue(data):
         if current_queue > last_queue:
             last_queue = current_queue
 
-        # ❌ ไม่ emit queue_updated
-        # ตั้งค่าเลขไว้เฉย ๆ
+        # ส่งสัญญาณอัปเดตเลขให้ทุกจอทันที
+        emit("queue_updated", {
+            "last": format_queue(last_queue),
+            "current": format_queue(current_queue)
+        }, broadcast=True)
     except:
         pass
 
@@ -104,7 +107,7 @@ def call_again():
 
 @socketio.on("skip_order")
 def skip_order():
-    # 🎯 เปลี่ยนเป็น "ขออนุญาตข้าม Order นะคะ" ตามที่มึงสั่ง
+    # 🎯 เปลี่ยนเป็น "ขออนุญาตข้ามออเดอร์นะคะ" ตามที่มึงสั่ง
     emit("speak_only", {
         "msg": "ขออนุญาตข้ามออเดอร์นะคะ"
     }, broadcast=True)
