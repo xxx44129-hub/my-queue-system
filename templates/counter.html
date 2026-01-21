@@ -10,7 +10,7 @@
     .current { font-size: 96px; font-weight: bold; color: #2a5298; margin: 20px 0; }
     .info { font-size: 18px; color: #555; margin-bottom: 20px; }
     .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-    button { font-size: 20px; padding: 18px; border: none; border-radius: 12px; cursor: pointer; font-weight: bold; }
+    button { font-size: 20px; padding: 18px; border: none; border-radius: 12px; cursor: pointer; font-weight: bold; -webkit-tap-highlight-color: transparent; }
     .new { background: #27ae60; color: white; }
     .next { background: #2980b9; color: white; }
     .skip { background: #e67e22; color: white; }
@@ -28,24 +28,15 @@
     .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
     input:checked + .slider { background-color: #2196F3; }
     input:checked + .slider:before { transform: translateX(26px); }
-
-    #unlock {
-        position: absolute; inset: 0; background: rgba(0,0,0,0.85); color: white;
-        display: flex; align-items: center; justify-content: center;
-        font-size: 24px; z-index: 9999; border-radius: 20px; cursor: pointer;
-    }
 </style>
 </head>
 
-<body>
-<div class="panel">
-    <div id="unlock">คลิกเพื่อเริ่มระบบ (Unlock Audio)</div>
-
+<body onclick="unlockAudio()"> <div class="panel">
     <h1>ระบบควบคุมคิว</h1>
     <div class="current" id="current">--</div>
     <div class="info">คิวล่าสุด: <b id="last">--</b></div>
 
-    <input id="setQueue" placeholder="กรอกคิว เช่น Q002"
+    <input id="setQueue" type="text" pattern="\d*" placeholder="กรอกเลขคิว เช่น 002" 
         style="font-size:22px;padding:12px;width:80%;text-align:center;border-radius:10px;border:1px solid #ccc;">
     <br><br>
     <button style="background:#8e44ad;color:white;padding:12px 30px;border-radius:10px;"
@@ -74,9 +65,17 @@ const socket = io();
 const currentEl = document.getElementById("current");
 const lastEl = document.getElementById("last");
 const inputEl = document.getElementById("setQueue");
-const unlock = document.getElementById("unlock");
 const voiceToggle = document.getElementById("voiceToggle");
-let unlocked = false;
+let audioUnlocked = false;
+
+// 🎯 ฟังก์ชันปลดล็อกเสียงสำหรับ iOS Safari
+function unlockAudio() {
+    if (audioUnlocked) return;
+    const msg = new SpeechSynthesisUtterance("");
+    window.speechSynthesis.speak(msg);
+    audioUnlocked = true;
+    console.log("Audio Unlocked for iOS");
+}
 
 /* ==================================
    ระบบเสียง (Logic บังคับผู้หญิง/ช้าลง)
@@ -93,13 +92,13 @@ function getBestFemaleThaiVoice() {
 }
 
 function speak(text) {
-    // เช็คทั้ง unlocked และ สวิตช์เปิดปิดเสียง
-    if (!unlocked || !voiceToggle.checked) return;
+    // เช็คสวิตช์เปิดปิดเสียง
+    if (!voiceToggle.checked) return;
 
     window.speechSynthesis.cancel();
     const msg = new SpeechSynthesisUtterance(text);
     msg.lang = 'th-TH';
-    msg.rate = 0.7; // พูดช้าลงตามสั่ง
+    msg.rate = 0.65; // พูดช้าลงตามสั่ง
     msg.pitch = 1.1;
 
     const selectedVoice = getBestFemaleThaiVoice();
@@ -108,11 +107,6 @@ function speak(text) {
 }
 
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
-
-unlock.addEventListener("click", () => {
-    unlocked = true;
-    unlock.style.display = "none";
-});
 
 /* ==================================
    Logic ควบคุม (คงเดิม 100%)
@@ -132,9 +126,10 @@ function handleCallNext() {
 }
 
 function handleAgain() {
-    const value = inputEl.value.trim().toUpperCase();
-    if (value !== "" && /^Q\d{3}$/.test(value)) {
-        socket.emit("set_queue", { queue: value });
+    let val = inputEl.value.trim().toUpperCase();
+    if (val !== "") {
+        if (!val.startsWith("Q")) val = "Q" + val.padStart(3, '0');
+        socket.emit("set_queue", { queue: val });
         inputEl.value = "";
     } else {
         socket.emit('call_again');
@@ -142,9 +137,10 @@ function handleAgain() {
 }
 
 function handleSetQueue() {
-    const value = inputEl.value.trim().toUpperCase();
-    if (!/^Q\d{3}$/.test(value)) { alert("กรุณากรอก Q001 - Q500"); return; }
-    socket.emit("set_queue", { queue: value });
+    let val = inputEl.value.trim().toUpperCase();
+    if (val === "") return;
+    if (!val.startsWith("Q")) val = "Q" + val.padStart(3, '0');
+    socket.emit("set_queue", { queue: val });
     inputEl.value = "";
 }
 
@@ -157,11 +153,11 @@ function handleReset() {
    ================================== */
 socket.on("call_queue", data => {
     currentEl.innerText = data.queue;
-    speak(data.msg); // ส่งเสียงถ้าเปิดสวิตช์อยู่
+    speak(data.msg); 
 });
 
 socket.on("speak_only", data => {
-    speak(data.msg); // เสียงข้ามออเดอร์
+    speak(data.msg); 
 });
 
 socket.on("queue_updated", data => {
