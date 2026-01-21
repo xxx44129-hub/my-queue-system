@@ -17,6 +17,7 @@
     .again { background: #f39c12; color: white; }
     .reset { background: #c0392b; color: white; }
     
+    /* สวิตช์เปิดปิดเสียง */
     .voice-control {
         margin-top: 20px; padding: 15px; background: #eee; border-radius: 10px;
         display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -68,6 +69,9 @@ const inputEl = document.getElementById("setQueue");
 const voiceToggle = document.getElementById("voiceToggle");
 let audioUnlocked = false;
 
+/* ==================================
+   ฟังก์ชันปลดล็อกเสียง
+   ================================== */
 function unlockAudio() {
     if (audioUnlocked) return;
     const msg = new SpeechSynthesisUtterance("");
@@ -76,14 +80,15 @@ function unlockAudio() {
 }
 
 /* ==================================
-   ระบบเสียง (ปรับจังหวะให้ออกครบทุกตัว)
+   ระบบเสียง (แก้ไขให้อ่านเลขครบทุกหลัก)
    ================================== */
 function formatSpeakText(text) {
     if (text.includes("Q")) {
-        // ใช้ "..." (จุด 3 จุด) เพื่อสร้างช่องว่างเล็กๆ ให้ AI อ่านแยกตัวชัดเจนขึ้น
+        // 🎯 แก้ไข: เอา Q ออกแล้วเอาเลขที่เหลือมาแยกห่างกันเพื่อให้เบราว์เซอร์อ่านทุกตัว
+        // เช่น Q005 -> "คิว 0 0 5"
         let rawDigits = text.replace("Q", ""); 
-        let separatedDigits = rawDigits.split("").join("..."); 
-        return "คิว..." + separatedDigits;
+        let separatedDigits = rawDigits.split("").join(" "); 
+        return "คิว " + separatedDigits;
     }
     return text;
 }
@@ -102,28 +107,24 @@ function getBestFemaleThaiVoice() {
 function speak(text) {
     if (!voiceToggle.checked) return;
 
-    // เคลียร์เสียงที่ค้างอยู่ก่อนหน้าแบบหมดจด
-    window.speechSynthesis.cancel();
+    window.speechSynthesis.cancel(); // ล้างคิวเสียงเก่า
 
-    // ต้องหน่วงเวลาเล็กน้อย (50ms) ก่อนเริ่มพูดใหม่ เพื่อป้องกันบัคเสียงสะดุดในคอม
-    setTimeout(() => {
-        const formattedText = formatSpeakText(text);
-        const msg = new SpeechSynthesisUtterance(formattedText);
-        msg.lang = 'th-TH';
-        msg.rate = 0.8; // ความเร็วระดับพอดี
-        msg.pitch = 1.0;
+    const formattedText = formatSpeakText(text);
+    const msg = new SpeechSynthesisUtterance(formattedText);
+    msg.lang = 'th-TH';
+    msg.rate = 0.8; 
+    msg.pitch = 1.1;
 
-        const selectedVoice = getBestFemaleThaiVoice();
-        if (selectedVoice) msg.voice = selectedVoice;
-        
-        window.speechSynthesis.speak(msg);
-    }, 50);
+    const selectedVoice = getBestFemaleThaiVoice();
+    if (selectedVoice) msg.voice = selectedVoice;
+    
+    window.speechSynthesis.speak(msg);
 }
 
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
 /* ==================================
-   Logic ควบคุม (คงเดิม 100%)
+   Logic ควบคุม (คงไว้ 100% ไม่ตัดออก)
    ================================== */
 function handleNew() { unlockAudio(); socket.emit('new_queue'); }
 
