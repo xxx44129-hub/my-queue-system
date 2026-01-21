@@ -4,30 +4,169 @@
 <meta charset="utf-8">
 <title>Queue Counter (Voice Control)</title>
 <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+
 <style>
-    body { margin: 0; font-family: "Segoe UI", sans-serif; background: #f4f6f9; height: 100vh; display: flex; justify-content: center; align-items: center; }
-    .panel { background: white; width: 550px; border-radius: 20px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.15); text-align: center; position: relative; }
-    .current { font-size: 96px; font-weight: bold; color: #2a5298; margin: 20px 0; }
-    .info { font-size: 18px; color: #555; margin-bottom: 20px; }
-    .buttons { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-    button { font-size: 20px; padding: 18px; border: none; border-radius: 12px; cursor: pointer; font-weight: bold; -webkit-tap-highlight-color: transparent; }
-    .new { background: #27ae60; color: white; }
-    .next { background: #2980b9; color: white; }
-    .skip { background: #e67e22; color: white; }
-    .again { background: #f39c12; color: white; }
-    .reset { background: #c0392b; color: white; }
-    
-    /* สวิตช์เปิดปิดเสียง */
-    .voice-control {
-        margin-top: 20px; padding: 15px; background: #eee; border-radius: 10px;
-        display: flex; align-items: center; justify-content: center; gap: 10px;
+    body {
+        margin: 0;
+        font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+        background: linear-gradient(135deg, #eef2ff, #f8fafc);
+        height: 100vh;
+        display: flex;
+        justify-content: center;
+        align-items: center;
     }
-    .switch { position: relative; display: inline-block; width: 60px; height: 34px; }
-    .switch input { opacity: 0; width: 0; height: 0; }
-    .slider { position: absolute; cursor: pointer; inset: 0; background-color: #ccc; transition: .4s; border-radius: 34px; }
-    .slider:before { position: absolute; content: ""; height: 26px; width: 26px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
-    input:checked + .slider { background-color: #2196F3; }
-    input:checked + .slider:before { transform: translateX(26px); }
+
+    .panel {
+        background: #ffffff;
+        width: 550px;
+        max-width: 92vw;
+        border-radius: 22px;
+        padding: 32px 28px;
+        box-shadow:
+            0 20px 40px rgba(0,0,0,0.12),
+            0 6px 16px rgba(0,0,0,0.08);
+        text-align: center;
+        position: relative;
+    }
+
+    h1 {
+        margin-top: 0;
+        margin-bottom: 10px;
+        font-size: 26px;
+        color: #1e293b;
+        font-weight: 700;
+    }
+
+    .current {
+        font-size: clamp(72px, 18vw, 110px);
+        font-weight: 800;
+        color: #2563eb;
+        margin: 20px 0 10px;
+        letter-spacing: 2px;
+    }
+
+    .info {
+        font-size: 18px;
+        color: #475569;
+        margin-bottom: 22px;
+    }
+
+    #setQueue {
+        font-size: 22px;
+        padding: 14px;
+        width: 80%;
+        max-width: 360px;
+        text-align: center;
+        border-radius: 12px;
+        border: 1px solid #cbd5e1;
+        outline: none;
+        transition: border 0.15s, box-shadow 0.15s;
+    }
+
+    #setQueue:focus {
+        border-color: #2563eb;
+        box-shadow: 0 0 0 3px rgba(37,99,235,0.15);
+    }
+
+    .buttons {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 16px;
+        margin-top: 10px;
+    }
+
+    button {
+        font-size: 20px;
+        padding: 18px 12px;
+        border: none;
+        border-radius: 16px;
+        cursor: pointer;
+        font-weight: 700;
+        color: white;
+        transition: transform 0.08s ease, box-shadow 0.08s ease, opacity 0.08s;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    button:active {
+        transform: scale(0.97);
+        box-shadow: 0 4px 10px rgba(0,0,0,0.2) inset;
+    }
+
+    .new {
+        background: linear-gradient(135deg, #22c55e, #16a34a);
+    }
+
+    .next {
+        background: linear-gradient(135deg, #3b82f6, #2563eb);
+    }
+
+    .skip {
+        background: linear-gradient(135deg, #f59e0b, #d97706);
+    }
+
+    .again {
+        background: linear-gradient(135deg, #fbbf24, #f59e0b);
+    }
+
+    .reset {
+        background: linear-gradient(135deg, #ef4444, #dc2626);
+    }
+
+    .voice-control {
+        margin-top: 22px;
+        padding: 14px;
+        background: #f1f5f9;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        font-size: 15px;
+        color: #334155;
+    }
+
+    .switch {
+        position: relative;
+        display: inline-block;
+        width: 56px;
+        height: 32px;
+    }
+
+    .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+
+    .slider {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        background-color: #cbd5e1;
+        transition: .3s;
+        border-radius: 32px;
+    }
+
+    .slider:before {
+        position: absolute;
+        content: "";
+        height: 24px;
+        width: 24px;
+        left: 4px;
+        bottom: 4px;
+        background-color: white;
+        transition: .3s;
+        border-radius: 50%;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.25);
+    }
+
+    input:checked + .slider {
+        background-color: #2563eb;
+    }
+
+    input:checked + .slider:before {
+        transform: translateX(24px);
+    }
 </style>
 </head>
 
@@ -37,9 +176,9 @@
     <div class="current" id="current">--</div>
     <div class="info">คิวล่าสุด: <b id="last">--</b></div>
 
-    <input id="setQueue" type="text" pattern="\d*" placeholder="กรอกเลขคิว เช่น 002" 
-        style="font-size:22px;padding:12px;width:80%;text-align:center;border-radius:10px;border:1px solid #ccc;">
+    <input id="setQueue" type="text" pattern="\d*" placeholder="กรอกเลขคิว เช่น 002">
     <br><br>
+
     <button style="background:#8e44ad;color:white;padding:12px 30px;border-radius:10px;"
         onclick="handleSetQueue()">ตั้งค่าคิว</button>
 
@@ -52,6 +191,7 @@
     </div>
 
     <br>
+
     <div class="buttons">
         <button class="new" onclick="handleNew()">รับคิวใหม่</button>
         <button class="next" onclick="handleNext()">เรียกคิวถัดไป</button>
@@ -84,10 +224,8 @@ function unlockAudio() {
    ================================== */
 function formatSpeakText(text) {
     if (text.includes("Q")) {
-        // 🎯 แก้ไข: เอา Q ออกแล้วเอาเลขที่เหลือมาแยกห่างกันเพื่อให้เบราว์เซอร์อ่านทุกตัว
-        // เช่น Q005 -> "คิว 0 0 5"
-        let rawDigits = text.replace("Q", ""); 
-        let separatedDigits = rawDigits.split("").join(" "); 
+        let rawDigits = text.replace("Q", "");
+        let separatedDigits = rawDigits.split("").join(" ");
         return "คิว " + separatedDigits;
     }
     return text;
@@ -107,24 +245,23 @@ function getBestFemaleThaiVoice() {
 function speak(text) {
     if (!voiceToggle.checked) return;
 
-    window.speechSynthesis.cancel(); // ล้างคิวเสียงเก่า
-
+    window.speechSynthesis.cancel();
     const formattedText = formatSpeakText(text);
     const msg = new SpeechSynthesisUtterance(formattedText);
     msg.lang = 'th-TH';
-    msg.rate = 0.8; 
+    msg.rate = 0.8;
     msg.pitch = 1.1;
 
     const selectedVoice = getBestFemaleThaiVoice();
     if (selectedVoice) msg.voice = selectedVoice;
-    
+
     window.speechSynthesis.speak(msg);
 }
 
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
 /* ==================================
-   Logic ควบคุม (คงไว้ 100% ไม่ตัดออก)
+   Logic ควบคุม (คงไว้ 100%)
    ================================== */
 function handleNew() { unlockAudio(); socket.emit('new_queue'); }
 
@@ -168,7 +305,9 @@ function handleSetQueue() {
 
 function handleReset() {
     unlockAudio();
-    if (confirm("ต้องการล้างคิวทั้งหมดใช่ไหม?")) { socket.emit('reset'); }
+    if (confirm("ต้องการล้างคิวทั้งหมดใช่ไหม?")) {
+        socket.emit('reset');
+    }
 }
 
 /* ==================================
@@ -176,11 +315,11 @@ function handleReset() {
    ================================== */
 socket.on("call_queue", data => {
     currentEl.innerText = data.queue;
-    speak(data.msg); 
+    speak(data.msg);
 });
 
 socket.on("speak_only", data => {
-    speak(data.msg); 
+    speak(data.msg);
 });
 
 socket.on("queue_updated", data => {
