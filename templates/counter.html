@@ -70,24 +70,25 @@ const voiceToggle = document.getElementById("voiceToggle");
 let audioUnlocked = false;
 
 /* ==================================
-   ฟังก์ชันปลดล็อกเสียง (สำคัญต่อ iPhone และคอมฯ)
+   ฟังก์ชันปลดล็อกเสียง
    ================================== */
 function unlockAudio() {
     if (audioUnlocked) return;
     const msg = new SpeechSynthesisUtterance("");
     window.speechSynthesis.speak(msg);
     audioUnlocked = true;
-    console.log("Audio System Unlocked");
 }
 
 /* ==================================
-   ระบบเสียง (Logic บังคับผู้หญิง/แยกตัวเลข)
+   ระบบเสียง (แก้ไขให้อ่านเลขครบทุกหลัก)
    ================================== */
 function formatSpeakText(text) {
-    if (text.startsWith("Q")) {
-        // เปลี่ยน Q405 เป็น "คิว 4 0 5" เพื่อให้อ่านแยกเลข
-        let nums = text.substring(1).split("").join(" ");
-        return "คิว " + nums;
+    if (text.includes("Q")) {
+        // 🎯 แก้ไข: เอา Q ออกแล้วเอาเลขที่เหลือมาแยกห่างกันเพื่อให้เบราว์เซอร์อ่านทุกตัว
+        // เช่น Q005 -> "คิว 0 0 5"
+        let rawDigits = text.replace("Q", ""); 
+        let separatedDigits = rawDigits.split("").join(" "); 
+        return "คิว " + separatedDigits;
     }
     return text;
 }
@@ -106,8 +107,7 @@ function getBestFemaleThaiVoice() {
 function speak(text) {
     if (!voiceToggle.checked) return;
 
-    // เคลียร์เสียงเก่า
-    window.speechSynthesis.cancel();
+    window.speechSynthesis.cancel(); // ล้างคิวเสียงเก่า
 
     const formattedText = formatSpeakText(text);
     const msg = new SpeechSynthesisUtterance(formattedText);
@@ -124,12 +124,9 @@ function speak(text) {
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
 /* ==================================
-   Logic ควบคุม (เชื่อมต่อ Socket)
+   Logic ควบคุม (คงไว้ 100% ไม่ตัดออก)
    ================================== */
-function handleNew() {
-    unlockAudio();
-    socket.emit('new_queue');
-}
+function handleNew() { unlockAudio(); socket.emit('new_queue'); }
 
 function handleNext() {
     unlockAudio();
@@ -146,10 +143,7 @@ function handleNext() {
     socket.emit('call_next');
 }
 
-function handleSkip() {
-    unlockAudio();
-    socket.emit('skip_order');
-}
+function handleSkip() { unlockAudio(); socket.emit('skip_order'); }
 
 function handleAgainBtn() {
     unlockAudio();
@@ -174,13 +168,11 @@ function handleSetQueue() {
 
 function handleReset() {
     unlockAudio();
-    if (confirm("ต้องการล้างคิวทั้งหมดใช่ไหม?")) {
-        socket.emit('reset');
-    }
+    if (confirm("ต้องการล้างคิวทั้งหมดใช่ไหม?")) { socket.emit('reset'); }
 }
 
 /* ==================================
-   Socket Events (ซิงค์เสียงและเลข)
+   Socket Events
    ================================== */
 socket.on("call_queue", data => {
     currentEl.innerText = data.queue;
