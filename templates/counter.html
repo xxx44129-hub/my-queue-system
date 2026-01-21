@@ -17,7 +17,6 @@
     .again { background: #f39c12; color: white; }
     .reset { background: #c0392b; color: white; }
     
-    /* สวิตช์เปิดปิดเสียง */
     .voice-control {
         margin-top: 20px; padding: 15px; background: #eee; border-radius: 10px;
         display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -31,7 +30,8 @@
 </style>
 </head>
 
-<body onclick="unlockAudio()"> <div class="panel">
+<body onclick="unlockAudio()">
+<div class="panel">
     <h1>ระบบควบคุมคิว</h1>
     <div class="current" id="current">--</div>
     <div class="info">คิวล่าสุด: <b id="last">--</b></div>
@@ -68,18 +68,22 @@ const inputEl = document.getElementById("setQueue");
 const voiceToggle = document.getElementById("voiceToggle");
 let audioUnlocked = false;
 
-// 🎯 ฟังก์ชันปลดล็อกเสียงสำหรับ iOS Safari
 function unlockAudio() {
     if (audioUnlocked) return;
     const msg = new SpeechSynthesisUtterance("");
     window.speechSynthesis.speak(msg);
     audioUnlocked = true;
-    console.log("Audio Unlocked for iOS");
 }
 
-/* ==================================
-   ระบบเสียง (Logic บังคับผู้หญิง/ช้าลง)
-   ================================== */
+// 🎯 ฟังก์ชันช่วยแยกตัวเลขให้อ่านเป็นตัวๆ
+function formatSpeakText(text) {
+    if (text.startsWith("Q")) {
+        // แยก Q และตัวเลขออกจากกัน เช่น "Q 4 0 5"
+        return "คิว " + text.substring(1).split("").join(" ");
+    }
+    return text;
+}
+
 function getBestFemaleThaiVoice() {
     const voices = window.speechSynthesis.getVoices();
     const femaleKeywords = ['Google ภาษาไทย', 'Kanya', 'Narisa', 'Pattara', 'Female'];
@@ -92,25 +96,27 @@ function getBestFemaleThaiVoice() {
 }
 
 function speak(text) {
-    // เช็คสวิตช์เปิดปิดเสียง
     if (!voiceToggle.checked) return;
 
+    // ล้างคิวเสียงเก่าทิ้งทันทีเพื่อลดดีเลย์
     window.speechSynthesis.cancel();
-    const msg = new SpeechSynthesisUtterance(text);
+
+    // ปรับรูปแบบข้อความก่อนอ่าน
+    const formattedText = formatSpeakText(text);
+    const msg = new SpeechSynthesisUtterance(formattedText);
+    
     msg.lang = 'th-TH';
-    msg.rate = 0.65; // พูดช้าลงตามสั่ง
-    msg.pitch = 1.1;
+    msg.rate = 0.8; // ปรับให้เร็วขึ้นนิดหนึ่งเพื่อให้ลื่นไหล
+    msg.pitch = 1.0;
 
     const selectedVoice = getBestFemaleThaiVoice();
     if (selectedVoice) msg.voice = selectedVoice;
+    
     window.speechSynthesis.speak(msg);
 }
 
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
-/* ==================================
-   Logic ควบคุม (คงเดิม 100%)
-   ================================== */
 function handleCallNext() {
     const lastStr = lastEl.innerText;
     const currentStr = currentEl.innerText;
@@ -148,9 +154,6 @@ function handleReset() {
     if (confirm("ต้องการล้างคิวทั้งหมดใช่ไหม?")) { socket.emit('reset'); }
 }
 
-/* ==================================
-   Socket Events (ซิงค์เสียงและเลข)
-   ================================== */
 socket.on("call_queue", data => {
     currentEl.innerText = data.queue;
     speak(data.msg); 
