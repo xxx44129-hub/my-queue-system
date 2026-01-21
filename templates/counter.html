@@ -17,6 +17,7 @@
     .again { background: #f39c12; color: white; }
     .reset { background: #c0392b; color: white; }
     
+    /* สวิตช์เปิดปิดเสียง */
     .voice-control {
         margin-top: 20px; padding: 15px; background: #eee; border-radius: 10px;
         display: flex; align-items: center; justify-content: center; gap: 10px;
@@ -30,7 +31,7 @@
 </style>
 </head>
 
-<body onclick="unlockAudio()">
+<body>
 <div class="panel">
     <h1>ระบบควบคุมคิว</h1>
     <div class="current" id="current">--</div>
@@ -52,10 +53,10 @@
 
     <br>
     <div class="buttons">
-        <button class="new" onclick="socket.emit('new_queue')">รับคิวใหม่</button>
-        <button class="next" onclick="handleCallNext()">เรียกคิวถัดไป</button>
-        <button class="skip" onclick="socket.emit('skip_order')">ข้าม Order</button>
-        <button class="again" onclick="handleAgain()">เรียกซ้ำ/คิวที่กรอก</button>
+        <button class="new" onclick="handleNew()">รับคิวใหม่</button>
+        <button class="next" onclick="handleNext()">เรียกคิวถัดไป</button>
+        <button class="skip" onclick="handleSkip()">ข้าม Order</button>
+        <button class="again" onclick="handleAgainBtn()">เรียกซ้ำ/คิวที่กรอก</button>
         <button class="reset" onclick="handleReset()">รีเซ็ต</button>
     </div>
 </div>
@@ -68,18 +69,25 @@ const inputEl = document.getElementById("setQueue");
 const voiceToggle = document.getElementById("voiceToggle");
 let audioUnlocked = false;
 
+/* ==================================
+   ฟังก์ชันปลดล็อกเสียง (สำคัญต่อ iPhone และคอมฯ)
+   ================================== */
 function unlockAudio() {
     if (audioUnlocked) return;
     const msg = new SpeechSynthesisUtterance("");
     window.speechSynthesis.speak(msg);
     audioUnlocked = true;
+    console.log("Audio System Unlocked");
 }
 
-// 🎯 ฟังก์ชันช่วยแยกตัวเลขให้อ่านเป็นตัวๆ
+/* ==================================
+   ระบบเสียง (Logic บังคับผู้หญิง/แยกตัวเลข)
+   ================================== */
 function formatSpeakText(text) {
     if (text.startsWith("Q")) {
-        // แยก Q และตัวเลขออกจากกัน เช่น "Q 4 0 5"
-        return "คิว " + text.substring(1).split("").join(" ");
+        // เปลี่ยน Q405 เป็น "คิว 4 0 5" เพื่อให้อ่านแยกเลข
+        let nums = text.substring(1).split("").join(" ");
+        return "คิว " + nums;
     }
     return text;
 }
@@ -98,16 +106,14 @@ function getBestFemaleThaiVoice() {
 function speak(text) {
     if (!voiceToggle.checked) return;
 
-    // ล้างคิวเสียงเก่าทิ้งทันทีเพื่อลดดีเลย์
+    // เคลียร์เสียงเก่า
     window.speechSynthesis.cancel();
 
-    // ปรับรูปแบบข้อความก่อนอ่าน
     const formattedText = formatSpeakText(text);
     const msg = new SpeechSynthesisUtterance(formattedText);
-    
     msg.lang = 'th-TH';
-    msg.rate = 0.8; // ปรับให้เร็วขึ้นนิดหนึ่งเพื่อให้ลื่นไหล
-    msg.pitch = 1.0;
+    msg.rate = 0.8; 
+    msg.pitch = 1.1;
 
     const selectedVoice = getBestFemaleThaiVoice();
     if (selectedVoice) msg.voice = selectedVoice;
@@ -117,7 +123,16 @@ function speak(text) {
 
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
-function handleCallNext() {
+/* ==================================
+   Logic ควบคุม (เชื่อมต่อ Socket)
+   ================================== */
+function handleNew() {
+    unlockAudio();
+    socket.emit('new_queue');
+}
+
+function handleNext() {
+    unlockAudio();
     const lastStr = lastEl.innerText;
     const currentStr = currentEl.innerText;
     if (lastStr !== "--") {
@@ -131,7 +146,13 @@ function handleCallNext() {
     socket.emit('call_next');
 }
 
-function handleAgain() {
+function handleSkip() {
+    unlockAudio();
+    socket.emit('skip_order');
+}
+
+function handleAgainBtn() {
+    unlockAudio();
     let val = inputEl.value.trim().toUpperCase();
     if (val !== "") {
         if (!val.startsWith("Q")) val = "Q" + val.padStart(3, '0');
@@ -143,6 +164,7 @@ function handleAgain() {
 }
 
 function handleSetQueue() {
+    unlockAudio();
     let val = inputEl.value.trim().toUpperCase();
     if (val === "") return;
     if (!val.startsWith("Q")) val = "Q" + val.padStart(3, '0');
@@ -151,9 +173,15 @@ function handleSetQueue() {
 }
 
 function handleReset() {
-    if (confirm("ต้องการล้างคิวทั้งหมดใช่ไหม?")) { socket.emit('reset'); }
+    unlockAudio();
+    if (confirm("ต้องการล้างคิวทั้งหมดใช่ไหม?")) {
+        socket.emit('reset');
+    }
 }
 
+/* ==================================
+   Socket Events (ซิงค์เสียงและเลข)
+   ================================== */
 socket.on("call_queue", data => {
     currentEl.innerText = data.queue;
     speak(data.msg); 
