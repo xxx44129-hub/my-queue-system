@@ -206,17 +206,21 @@ const voiceToggle = document.getElementById("voiceToggle");
 let audioUnlocked = false;
 
 /* ==================================
-   ฟังก์ชันปลดล็อกเสียง
+   ฟังก์ชันปลดล็อกเสียง (จิ้มครั้งแรก)
    ================================== */
 function unlockAudio() {
     if (audioUnlocked) return;
     const msg = new SpeechSynthesisUtterance("");
     window.speechSynthesis.speak(msg);
     audioUnlocked = true;
+    console.log("Audio System Unlocked");
 }
 
+// ผูกฟังก์ชันปลดล็อกไว้กับตัว Body เพื่อความชัวร์
+document.body.addEventListener('click', unlockAudio, { once: true });
+
 /* ==================================
-   ระบบเสียง (แก้ไขให้อ่านเลขครบทุกหลัก)
+   ระบบเสียง (ซ่อมจุดสะดุดบนคอม)
    ================================== */
 function formatSpeakText(text) {
     if (text.includes("Q")) {
@@ -241,27 +245,31 @@ function getBestFemaleThaiVoice() {
 function speak(text) {
     if (!voiceToggle.checked) return;
 
+    // เคลียร์เสียงที่ค้างอยู่ก่อนหน้า
     window.speechSynthesis.cancel();
-    const formattedText = formatSpeakText(text);
-    const msg = new SpeechSynthesisUtterance(formattedText);
-    msg.lang = 'th-TH';
-    msg.rate = 0.8;
-    msg.pitch = 1.1;
 
-    const selectedVoice = getBestFemaleThaiVoice();
-    if (selectedVoice) msg.voice = selectedVoice;
+    // ต้องหน่วงเวลาเล็กน้อย (50ms) เพื่อให้ Browser เคลียร์คิวเสียงเก่าจบจริงๆ
+    setTimeout(() => {
+        const formattedText = formatSpeakText(text);
+        const msg = new SpeechSynthesisUtterance(formattedText);
+        msg.lang = 'th-TH';
+        msg.rate = 0.8;
+        msg.pitch = 1.1;
 
-    window.speechSynthesis.speak(msg);
+        const selectedVoice = getBestFemaleThaiVoice();
+        if (selectedVoice) msg.voice = selectedVoice;
+
+        window.speechSynthesis.speak(msg);
+    }, 50);
 }
 
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
 /* ==================================
-   Logic ควบคุม (ปรับแก้ตามสั่ง)
+   Logic ควบคุม
    ================================== */
 function handleNext() {
     unlockAudio();
-    // 🎯 แก้ไข: ให้กดแล้วรันเลขขึ้น 1 ทันที และส่งสัญญาณเรียก
     let currentStr = currentEl.innerText;
     let nextNum = 1;
 
@@ -269,15 +277,10 @@ function handleNext() {
         nextNum = parseInt(currentStr.substring(1)) + 1;
     }
 
-    if (nextNum > 500) nextNum = 1; // กันบัคเกิน 500
+    if (nextNum > 500) nextNum = 1; 
 
     const nextQ = "Q" + String(nextNum).padStart(3, '0');
-    
-    // ส่งสัญญาณไปที่ app.py เพื่อให้อัปเดตทุกจอทันที
     socket.emit("set_queue", { queue: nextQ });
-    
-    // สั่งพูดที่หน้าจอนี้ด้วยถ้าเปิดสวิตช์ไว้
-    // (จริงๆ app.py จะส่ง call_queue กลับมาให้พูดอยู่แล้ว แต่ใส่กันเหนียว)
 }
 
 function handleSkip() { unlockAudio(); socket.emit('skip_order'); }
