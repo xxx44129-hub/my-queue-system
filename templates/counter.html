@@ -152,7 +152,7 @@
     <div class="current" id="current">--</div>
     <div class="info">คิวล่าสุด: <b id="last">--</b></div>
 
-    <input id="setQueue" type="text" pattern="\d*" placeholder="กรอกเลขคิว เช่น 002">
+    <input id="setQueue" type="text" pattern="\d*" placeholder="กรอกเลข เช่น 002">
     <br><br>
 
     <button style="background:#8e44ad;color:white;padding:12px 30px;border-radius:10px;"
@@ -229,16 +229,26 @@ function speak(text) {
 
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
+/* ==================================
+   Logic ควบคุม (แก้ให้กด Next แล้วรันเลขและสั่งพูดทันที)
+   ================================== */
 function handleNext() {
     unlockAudio();
+    
     let currentStr = currentEl.innerText;
-    let nextNum = 1;
-    if (currentStr !== "--") {
-        nextNum = parseInt(currentStr.substring(1)) + 1;
+    let lastNum = parseInt(lastEl.innerText.substring(1)) || 0;
+    let currentNum = currentStr === "--" ? 0 : parseInt(currentStr.substring(1));
+
+    // เช็คว่ายังมีคิวใหม่ให้เรียกหรือไม่
+    if (currentNum < lastNum) {
+        const nextNum = currentNum + 1;
+        const nextQ = "Q" + String(nextNum).padStart(3, '0');
+        
+        // 🎯 แก้จุดนี้: ส่งไปตั้งค่าคิวใหม่ เพื่อให้ Server สั่ง call_queue กลับมาที่ทุกจอพร้อมเสียง
+        socket.emit("set_queue", { queue: nextQ });
+    } else {
+        alert("ไม่มีคิวถัดไปในระบบแล้วมึง!");
     }
-    if (nextNum > 500) nextNum = 1; 
-    const nextQ = "Q" + String(nextNum).padStart(3, '0');
-    socket.emit("set_queue", { queue: nextQ });
 }
 
 function handleSkip() { unlockAudio(); socket.emit('skip_order'); }
@@ -271,9 +281,12 @@ function handleReset() {
     }
 }
 
+/* ==================================
+   Socket Events
+   ================================== */
 socket.on("call_queue", data => {
     currentEl.innerText = data.queue;
-    speak(data.queue); // 🎯 อ้างอิง data.queue ตรงๆ ตามที่เคยดัง
+    speak(data.queue); 
 });
 
 socket.on("speak_only", data => {
