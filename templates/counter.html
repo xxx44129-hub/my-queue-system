@@ -92,10 +92,6 @@
         box-shadow: 0 4px 10px rgba(0,0,0,0.2) inset;
     }
 
-    .new {
-        background: linear-gradient(135deg, #22c55e, #16a34a);
-    }
-
     .next {
         background: linear-gradient(135deg, #3b82f6, #2563eb);
     }
@@ -193,9 +189,9 @@
     <br>
 
     <div class="buttons">
-        <button class="new" onclick="handleNew()">รับคิวใหม่</button>
         <button class="next" onclick="handleNext()">เรียกคิวถัดไป</button>
         <button class="skip" onclick="handleSkip()">ข้าม Order</button>
+        
         <button class="again" onclick="handleAgainBtn()">เรียกซ้ำ/คิวที่กรอก</button>
         <button class="reset" onclick="handleReset()">รีเซ็ต</button>
     </div>
@@ -261,23 +257,27 @@ function speak(text) {
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
 /* ==================================
-   Logic ควบคุม (คงไว้ 100%)
+   Logic ควบคุม (ปรับแก้ตามสั่ง)
    ================================== */
-function handleNew() { unlockAudio(); socket.emit('new_queue'); }
-
 function handleNext() {
     unlockAudio();
-    const lastStr = lastEl.innerText;
-    const currentStr = currentEl.innerText;
-    if (lastStr !== "--") {
-        const lastNum = parseInt(lastStr.substring(1));
-        const currentNum = currentStr === "--" ? 0 : parseInt(currentStr.substring(1));
-        if (currentNum < lastNum) {
-            const nextQ = "Q" + String(currentNum + 1).padStart(3, '0');
-            currentEl.innerText = nextQ;
-        }
+    // 🎯 แก้ไข: ให้กดแล้วรันเลขขึ้น 1 ทันที และส่งสัญญาณเรียก
+    let currentStr = currentEl.innerText;
+    let nextNum = 1;
+
+    if (currentStr !== "--") {
+        nextNum = parseInt(currentStr.substring(1)) + 1;
     }
-    socket.emit('call_next');
+
+    if (nextNum > 500) nextNum = 1; // กันบัคเกิน 500
+
+    const nextQ = "Q" + String(nextNum).padStart(3, '0');
+    
+    // ส่งสัญญาณไปที่ app.py เพื่อให้อัปเดตทุกจอทันที
+    socket.emit("set_queue", { queue: nextQ });
+    
+    // สั่งพูดที่หน้าจอนี้ด้วยถ้าเปิดสวิตช์ไว้
+    // (จริงๆ app.py จะส่ง call_queue กลับมาให้พูดอยู่แล้ว แต่ใส่กันเหนียว)
 }
 
 function handleSkip() { unlockAudio(); socket.emit('skip_order'); }
