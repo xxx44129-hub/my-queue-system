@@ -23,7 +23,7 @@ last_queue = 0
 current_queue = 0
 
 # ====================
-# Helper Functions (คงไว้ 100% ตามต้นฉบับมึง)
+# Helper Functions
 # ====================
 def format_queue(n):
     return f"Q{n:03d}"
@@ -49,65 +49,53 @@ def set_queue(data):
     global current_queue, last_queue
     try:
         q = data.get("queue", "").upper().strip()
+        # รับสถานะสวิตช์จากหน้า Counter
+        voice_on_counter = data.get("voice_on_counter", False) 
+        
         if not q.startswith("Q"): return
         number = int(q[1:])
-        if number < 1 or number > 500: return
+        if number < 1 or number > 999: return # ปรับให้รันถึง 999 ตามที่มึงคุยไว้
 
         current_queue = number
         if current_queue > last_queue:
             last_queue = current_queue
 
-        # ส่งสัญญาณอัปเดตเลขให้ทุกจอทันที
-        emit("queue_updated", {
-            "last": format_queue(last_queue),
-            "current": format_queue(current_queue)
-        }, broadcast=True)
-    except:
-        pass
-
-@socketio.on("new_queue")
-def new_queue():
-    global last_queue
-    if last_queue < 500:
-        last_queue += 1
-    # อัปเดตฝั่งคนรับคิวใหม่
-    emit("queue_updated", {
-        "last": format_queue(last_queue),
-        "current": format_queue(current_queue) if current_queue else "--"
-    }, broadcast=True)
-
-@socketio.on("call_next")
-def call_next():
-    global current_queue
-    if current_queue < last_queue:
-        current_queue += 1
         q_text = format_queue(current_queue)
-        
-        # 🎯 ส่งสัญญาณเรียกคิว: เลข + เสียงพร้อมกัน
-        emit("call_queue", { 
-            "queue": q_text, 
-            "msg": q_text 
-        }, broadcast=True)
-        
-        # อัปเดตสถานะตัวเลข
+
+        # 1. ส่งอัปเดตตัวเลขให้ทุกจอ
         emit("queue_updated", {
             "last": format_queue(last_queue),
             "current": q_text
         }, broadcast=True)
 
+        # 2. 🎯 Logic ทางแยกเสียงตามสั่ง
+        if voice_on_counter:
+            # ถ้าเปิดสวิตช์: สั่งให้เฉพาะหน้า Counter พูด (ส่งไป Event เฉพาะ)
+            emit("call_queue_locally", {"queue": q_text})
+        else:
+            # ถ้าปิดสวิตช์: สั่งให้หน้า Display พูด (ลูกค้าได้ยิน)
+            emit("call_queue_display", {"queue": q_text}, broadcast=True)
+
+    except:
+        pass
+
 @socketio.on("call_again")
-def call_again():
+def call_again(data=None):
+    global current_queue
+    # รับสถานะสวิตช์ (เผื่อกดปุ่มเรียกซ้ำ)
+    voice_on_counter = data.get("voice_on_counter", False) if data else False
+    
     if current_queue > 0:
         q_text = format_queue(current_queue)
-        # เรียกซ้ำโดยส่งรหัสคิวไปให้พูด
-        emit("call_queue", { 
-            "queue": q_text, 
-            "msg": q_text 
-        }, broadcast=True)
+        
+        if voice_on_counter:
+            emit("call_queue_locally", {"queue": q_text})
+        else:
+            emit("call_queue_display", {"queue": q_text}, broadcast=True)
 
 @socketio.on("skip_order")
 def skip_order():
-    # 🎯 เปลี่ยนเป็น "ขออนุญาตข้ามออเดอร์นะคะ" ตามที่มึงสั่งเป๊ะๆ
+    # ข้ามออเดอร์ให้ดังที่หน้า Display เสมอตามที่มึงเคยบอก
     emit("speak_only", {
         "msg": "ขออนุญาตข้ามออเดอร์นะคะ"
     }, broadcast=True)
@@ -118,12 +106,12 @@ def reset():
     last_queue = 0
     current_queue = 0
     emit("queue_updated", {"last": "--", "current": "--"}, broadcast=True)
+    emit("reset_done", broadcast=True)
 
 # ====================
 # Main execution
 # ====================
 if __name__ == "__main__":
-    # ตรวจสอบโฟลเดอร์ static ตามโครงสร้างเดิมมึง
     if not os.path.exists("static"):
         os.makedirs("static")
     socketio.run(app)
