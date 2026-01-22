@@ -1,63 +1,62 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
-<meta charset="utf-8">
-<title>Queue Display</title>
+    <meta charset="utf-8">
+    <title>Queue Display</title>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
-<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black">
+    <meta name="apple-mobile-web-app-title" content="Queue Display">
 
-<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black">
-<meta name="apple-mobile-web-app-title" content="Queue Display">
-<link rel="apple-touch-icon" href="/static/icon-512.png">
+    <style>
+        body {
+            margin: 0;
+            font-family: "Segoe UI", Arial, sans-serif;
+            background: linear-gradient(135deg, #0f2027, #2c5364);
+            color: white;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+        }
+        .container { text-align: center; }
 
-<style>
-body {
-    margin: 0;
-    font-family: "Segoe UI", Arial, sans-serif;
-    background: linear-gradient(135deg, #0f2027, #2c5364);
-    color: white;
-    height: 100vh;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    overflow: hidden;
-}
-.container { text-align: center; }
+        .queue {
+            font-size: clamp(96px, 22vw, 240px);
+            font-weight: bold;
+            color: #ffd700;
+            text-shadow: 0 10px 20px rgba(0,0,0,0.5);
+            transition: all 0.3s ease;
+        }
 
-.queue {
-    font-size: clamp(96px, 22vw, 240px);
-    font-weight: bold;
-    color: #ffd700;
-    text-shadow: 0 10px 20px rgba(0,0,0,0.5);
-    transition: all 0.3s ease;
-}
+        .subtitle {
+            font-size: clamp(24px, 5vw, 48px);
+            margin-top: 20px;
+            color: #e0e0e0;
+            letter-spacing: 2px;
+        }
 
-.subtitle {
-    font-size: clamp(24px, 5vw, 48px);
-    margin-top: 20px;
-    color: #e0e0e0;
-    letter-spacing: 2px;
-}
+        /* หน้ากากสำหรับปลดล็อกเสียงในครั้งแรกที่เปิดหน้าจอ */
+        #unlock {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.01);
+            z-index: 9999;
+            cursor: pointer;
+        }
 
-#unlock {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100%;
-    height: 100%;
-    background: rgba(0,0,0,0.01);
-    z-index: 9999;
-    cursor: pointer;
-}
-
-@keyframes pop {
-    0% { transform: scale(1); }
-    50% { transform: scale(1.15); color: #fff; }
-    100% { transform: scale(1); }
-}
-</style>
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); color: #fff; }
+            100% { transform: scale(1); }
+        }
+    </style>
 </head>
 
 <body>
@@ -66,104 +65,88 @@ body {
 
 <div class="container">
     <div class="queue" id="queue">--</div>
-    <div class="subtitle">เชิญที่ช่องบริการค่ะ</div>
+    <div class="subtitle">เมนูที่สั่งได้แล้วค่ะ</div>
 </div>
 
 <script>
-const socket = io();
-const queueEl = document.getElementById("queue");
-const unlock = document.getElementById("unlock");
-let unlocked = false;
+    const socket = io();
+    const queueEl = document.getElementById("queue");
+    const unlock = document.getElementById("unlock");
+    let unlocked = false;
 
-/* ==================================
-   ระบบเสียง (คงเดิม 100% ตามต้นฉบับ)
-   ================================== */
-function getBestFemaleThaiVoice() {
-    const voices = window.speechSynthesis.getVoices();
-    const femaleKeywords = ['Google ภาษาไทย', 'Kanya', 'Narisa', 'Pattara', 'Female'];
-    const thaiVoices = voices.filter(v => v.lang && v.lang.startsWith('th'));
-    
-    for (let kw of femaleKeywords) {
-        let found = thaiVoices.find(v => v.name.includes(kw));
-        if (found) return found;
+    // ฟังก์ชันหาเสียงภาษาไทย
+    function getBestThaiVoice() {
+        const voices = window.speechSynthesis.getVoices();
+        return voices.find(v => v.lang.startsWith('th')) || null;
     }
-    return thaiVoices.length > 0 ? thaiVoices[0] : null;
-}
 
-function formatSpeakText(text) {
-    if (text.includes("Q")) {
+    // ฟังก์ชันพูดสำหรับหน้า Display
+    function speak(text) {
+        if (!unlocked) return;
+
+        window.speechSynthesis.cancel(); // หยุดเสียงเก่าก่อนพูดใหม่
+
+        // ปรับแต่งคำพูดให้อ่านแยกเลข
         let rawDigits = text.replace("Q", "");
         let separatedDigits = rawDigits.split("").join(" ");
-        return "คิว " + separatedDigits + " ค่ะ";
-    }
-    return text;
-}
+        let finalMessage = "คิว " + separatedDigits + " เมนูที่สั่งได้แล้วค่ะ";
 
-function speak(text) {
-    if (!unlocked) return;
-
-    const speakTask = () => {
-        window.speechSynthesis.cancel();
-        const formattedText = formatSpeakText(text);
-        const msg = new SpeechSynthesisUtterance(formattedText);
+        const msg = new SpeechSynthesisUtterance(finalMessage);
         msg.lang = 'th-TH';
-        msg.rate = 0.7; // 🎯 ปรับให้พูดช้าลงตามที่มึงสั่ง
-        msg.pitch = 1.1; 
+        msg.rate = 0.8; // ความเร็วปกติ
+        msg.pitch = 1.0;
 
-        const selectedVoice = getBestFemaleThaiVoice();
-        if (selectedVoice) {
-            msg.voice = selectedVoice;
-        }
+        const voice = getBestThaiVoice();
+        if (voice) msg.voice = voice;
 
         window.speechSynthesis.speak(msg);
-    };
-
-    if (window.speechSynthesis.getVoices().length === 0) {
-        window.speechSynthesis.onvoiceschanged = speakTask;
-    } else {
-        speakTask();
     }
-}
 
-window.speechSynthesis.getVoices();
-if (speechSynthesis.onvoiceschanged !== undefined) {
-    speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
-}
+    // ปลดล็อกระบบเสียงเมื่อคลิกที่ใดก็ได้ในหน้าจอครั้งแรก
+    unlock.addEventListener("click", () => {
+        unlocked = true;
+        unlock.style.display = "none";
+        // ทดสอบพูดสั้นๆ เพื่อเปิดทางให้ Browser
+        const testMsg = new SpeechSynthesisUtterance("เริ่มระบบค่ะ");
+        testMsg.lang = 'th-TH';
+        window.speechSynthesis.speak(testMsg);
+        console.log("Display Audio Unlocked");
+    });
 
-unlock.addEventListener("click", () => {
-    unlocked = true;
-    unlock.style.display = "none";
-    speak("เริ่มระบบค่ะ");
-});
+    // โหลดเสียงเตรียมไว้
+    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
-/* ==================================
-   Socket.IO Events (เชื่อมต่อกับ Counter)
-   ================================== */
-socket.on("call_queue", data => {
-    queueEl.innerText = data.queue;
+    /* --- Socket Events --- */
     
-    // Animation กระเด้ง
-    queueEl.style.animation = "none";
-    queueEl.offsetHeight; 
-    queueEl.style.animation = "pop 0.4s ease-out";
-    
-    // 🎯 ใช้ data.queue ตรงๆ ตามที่มึงยืนยันว่าดัง
-    speak(data.queue); 
-});
+    // เมื่อมีการเรียกคิว (ทั้ง Next, Set หรือ Again)
+    socket.on("call_queue", data => {
+        queueEl.innerText = data.queue;
+        
+        // ใส่ Animation กระเด้ง
+        queueEl.style.animation = "none";
+        queueEl.offsetHeight; 
+        queueEl.style.animation = "pop 0.4s ease-out";
+        
+        // พูดเสมอเมื่อมีคิวมา
+        speak(data.queue);
+    });
 
-socket.on("speak_only", data => {
-    speak(data.msg);
-});
+    // สำหรับเสียงแจ้งเตือนอื่นๆ เช่น ข้ามออเดอร์
+    socket.on("speak_only", data => {
+        speak(data.msg);
+    });
 
-socket.on("queue_updated", data => {
-    if (data.current) {
-        queueEl.innerText = data.current;
-    }
-});
+    // อัปเดตเลขหน้าจอเฉยๆ (ถ้ามี)
+    socket.on("queue_updated", data => {
+        if (data.current) {
+            queueEl.innerText = data.current;
+        }
+    });
 
-socket.on("reset_done", () => {
-    queueEl.innerText = "--";
-});
+    // เมื่อมีการรีเซ็ต
+    socket.on("reset_done", () => {
+        queueEl.innerText = "--";
+    });
 </script>
 </body>
 </html>
