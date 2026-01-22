@@ -184,6 +184,7 @@ const inputEl = document.getElementById("setQueue");
 const voiceToggle = document.getElementById("voiceToggle");
 let audioUnlocked = false;
 
+/* --- ปลดล็อกเสียง --- */
 function unlockAudio() {
     if (audioUnlocked) return;
     const msg = new SpeechSynthesisUtterance("");
@@ -191,75 +192,66 @@ function unlockAudio() {
     audioUnlocked = true;
 }
 
-function formatSpeakText(text) {
-    if (text.includes("Q")) {
-        let rawDigits = text.replace("Q", "");
-        let separatedDigits = rawDigits.split("").join(" ");
-        return "คิว " + separatedDigits;
-    }
-    return text;
-}
-
-function getBestFemaleThaiVoice() {
-    const voices = window.speechSynthesis.getVoices();
-    const femaleKeywords = ['Google ภาษาไทย', 'Kanya', 'Narisa', 'Pattara', 'Female'];
-    const thaiVoices = voices.filter(v => v.lang && v.lang.startsWith('th'));
-    for (let kw of femaleKeywords) {
-        let found = thaiVoices.find(v => v.name.includes(kw));
-        if (found) return found;
-    }
-    return thaiVoices.length > 0 ? thaiVoices[0] : null;
-}
-
+/* --- ฟังก์ชันพูด (ใช้เฉพาะหน้านี้) --- */
 function speak(text) {
-    if (!voiceToggle.checked) return;
+    if (!voiceToggle.checked) return; // ถ้าสวิตช์ปิดอยู่ ไม่ต้องพูด
+
     window.speechSynthesis.cancel();
-    setTimeout(() => {
-        const formattedText = formatSpeakText(text);
-        const msg = new SpeechSynthesisUtterance(formattedText);
-        msg.lang = 'th-TH';
-        msg.rate = 0.8;
-        msg.pitch = 1.1;
-        const selectedVoice = getBestFemaleThaiVoice();
-        if (selectedVoice) msg.voice = selectedVoice;
-        window.speechSynthesis.speak(msg);
-    }, 50);
+    
+    // จัดรูปแบบให้อ่านทีละหลัก
+    let rawDigits = text.replace("Q", "");
+    let separated = rawDigits.split("").join(" ");
+    let finalMsg = "คิว " + separated;
+
+    const msg = new SpeechSynthesisUtterance(finalMsg);
+    msg.lang = 'th-TH';
+    msg.rate = 0.8;
+    
+    // หาเสียงภาษาไทย
+    const voices = window.speechSynthesis.getVoices();
+    const thaiVoice = voices.find(v => v.lang.startsWith('th'));
+    if (thaiVoice) msg.voice = thaiVoice;
+
+    window.speechSynthesis.speak(msg);
 }
 
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
-/* ==================================
-   Logic ปุ่มถัดไป: กดแล้วรันเลข + พูดทันที
-   ================================== */
+/* --- Logic ปุ่มถัดไป --- */
 function handleNext() {
     unlockAudio();
     let currentStr = currentEl.innerText;
     let nextNum = 1;
 
-    // รันเลขต่อไปเรื่อยๆ จากเลขบนจอ
     if (currentStr !== "--" && currentStr !== "") {
         nextNum = parseInt(currentStr.replace("Q", "")) + 1;
     }
-    
     if (nextNum > 999) nextNum = 1;
-
     const nextQ = "Q" + String(nextNum).padStart(3, '0');
     
-    // 🎯 หัวใจสำคัญ: ส่งสัญญาณตั้งคิว เพื่อให้เซิร์ฟเวอร์สั่งเรียกคิวกลับมาที่ทุกจอพร้อมเสียง
+    // 🎯 แก้จุดนี้: พูดทันทีที่เครื่องนี้ (ไม่ต้องรอ Server)
+    speak(nextQ);
+
+    // ส่งสัญญาณไปบอกหน้าจอ Display และเครื่องอื่นๆ
     socket.emit("set_queue", { queue: nextQ });
 }
-
-function handleSkip() { unlockAudio(); socket.emit('skip_order'); }
 
 function handleAgainBtn() {
     unlockAudio();
     let val = inputEl.value.trim().toUpperCase();
+    let targetQ = "";
+
     if (val !== "") {
         if (!val.startsWith("Q")) val = "Q" + val.padStart(3, '0');
-        socket.emit("set_queue", { queue: val });
+        targetQ = val;
         inputEl.value = "";
     } else {
-        socket.emit('call_again');
+        targetQ = currentEl.innerText;
+    }
+
+    if (targetQ !== "--") {
+        speak(targetQ); // พูดทันทีที่เครื่องนี้
+        socket.emit("set_queue", { queue: targetQ });
     }
 }
 
@@ -268,24 +260,23 @@ function handleSetQueue() {
     let val = inputEl.value.trim().toUpperCase();
     if (val === "") return;
     if (!val.startsWith("Q")) val = "Q" + val.padStart(3, '0');
+    
+    speak(val); // พูดทันทีที่เครื่องนี้
     socket.emit("set_queue", { queue: val });
     inputEl.value = "";
 }
 
-function handleReset() {
-    unlockAudio();
-    if (confirm("ต้องการล้างคิวทั้งหมดใช่ไหม?")) {
-        socket.emit('reset');
-    }
+function handleSkip() { unlockAudio(); socket.emit('skip_order'); }
+function handleReset() { 
+    unlockAudio(); 
+    if (confirm("รีเซ็ต?")) socket.emit('reset'); 
 }
 
+/* --- Socket Events --- */
 socket.on("call_queue", data => {
     currentEl.innerText = data.queue;
+    // ถ้าหน้าจอนี้เปิดเสียงไว้ ก็จะพูดเมื่อมีการอัปเดตมาจากเครื่องอื่นด้วย
     speak(data.queue); 
-});
-
-socket.on("speak_only", data => {
-    speak(data.msg);
 });
 
 socket.on("queue_updated", data => {
