@@ -5,11 +5,6 @@
     <title>Queue Display</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
 
-    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    <meta name="apple-mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black">
-    <meta name="apple-mobile-web-app-title" content="Queue Display">
-
     <style>
         body {
             margin: 0;
@@ -29,7 +24,6 @@
             font-weight: bold;
             color: #ffd700;
             text-shadow: 0 10px 20px rgba(0,0,0,0.5);
-            transition: all 0.3s ease;
         }
 
         .subtitle {
@@ -39,13 +33,9 @@
             letter-spacing: 2px;
         }
 
-        /* หน้ากากสำหรับปลดล็อกเสียงในครั้งแรกที่เปิดหน้าจอ */
         #unlock {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
+            inset: 0;
             background: rgba(0,0,0,0.01);
             z-index: 9999;
             cursor: pointer;
@@ -71,79 +61,69 @@
 <script>
     const socket = io();
     const queueEl = document.getElementById("queue");
-    const unlock = document.getElementById("unlock");
     let unlocked = false;
 
-    // ฟังก์ชันหาเสียงภาษาไทย
-    function getBestThaiVoice() {
-        const voices = window.speechSynthesis.getVoices();
-        return voices.find(v => v.lang.startsWith('th')) || null;
-    }
-
     // ฟังก์ชันพูดสำหรับหน้า Display
-    function speak(text) {
+    function speak(text, customMsg = null) {
         if (!unlocked) return;
+        window.speechSynthesis.cancel();
 
-        window.speechSynthesis.cancel(); // หยุดเสียงเก่าก่อนพูดใหม่
-
-        // ปรับแต่งคำพูดให้อ่านแยกเลข
-        let rawDigits = text.replace("Q", "");
-        let separatedDigits = rawDigits.split("").join(" ");
-        let finalMessage = "คิว " + separatedDigits + " เมนูที่สั่งได้แล้วค่ะ";
+        let finalMessage = "";
+        if (customMsg) {
+            finalMessage = customMsg;
+        } else {
+            let digits = text.replace("Q", "").split("").join(" ");
+            finalMessage = "คิว " + digits + " เมนูที่สั่งได้แล้วค่ะ";
+        }
 
         const msg = new SpeechSynthesisUtterance(finalMessage);
         msg.lang = 'th-TH';
-        msg.rate = 0.8; // ความเร็วปกติ
-        msg.pitch = 1.0;
-
-        const voice = getBestThaiVoice();
-        if (voice) msg.voice = voice;
+        msg.rate = 0.8;
+        
+        const voices = window.speechSynthesis.getVoices();
+        const thaiVoice = voices.find(v => v.lang.startsWith('th'));
+        if (thaiVoice) msg.voice = thaiVoice;
 
         window.speechSynthesis.speak(msg);
     }
 
-    // ปลดล็อกระบบเสียงเมื่อคลิกที่ใดก็ได้ในหน้าจอครั้งแรก
-    unlock.addEventListener("click", () => {
+    // ปลดล็อกเสียง
+    document.getElementById("unlock").addEventListener("click", function() {
         unlocked = true;
-        unlock.style.display = "none";
-        // ทดสอบพูดสั้นๆ เพื่อเปิดทางให้ Browser
-        const testMsg = new SpeechSynthesisUtterance("เริ่มระบบค่ะ");
-        testMsg.lang = 'th-TH';
-        window.speechSynthesis.speak(testMsg);
-        console.log("Display Audio Unlocked");
+        this.style.display = "none";
+        const startMsg = new SpeechSynthesisUtterance("เริ่มระบบแสดงผลค่ะ");
+        startMsg.lang = 'th-TH';
+        window.speechSynthesis.speak(startMsg);
     });
 
-    // โหลดเสียงเตรียมไว้
     window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
     /* --- Socket Events --- */
-    
-    // เมื่อมีการเรียกคิว (ทั้ง Next, Set หรือ Again)
-    socket.on("call_queue", data => {
+
+    // 🎯 รับคำสั่งเรียกคิวเมื่อ Counter ปิดสวิตช์เสียง (Server จะส่ง Event นี้มา)
+    socket.on("call_queue_display", data => {
         queueEl.innerText = data.queue;
         
-        // ใส่ Animation กระเด้ง
+        // Animation
         queueEl.style.animation = "none";
         queueEl.offsetHeight; 
         queueEl.style.animation = "pop 0.4s ease-out";
         
-        // พูดเสมอเมื่อมีคิวมา
         speak(data.queue);
     });
 
-    // สำหรับเสียงแจ้งเตือนอื่นๆ เช่น ข้ามออเดอร์
+    // สำหรับเสียงข้ามออเดอร์ หรือประกาศอื่นๆ
     socket.on("speak_only", data => {
-        speak(data.msg);
+        speak(null, data.msg);
     });
 
-    // อัปเดตเลขหน้าจอเฉยๆ (ถ้ามี)
+    // อัปเดตตัวเลขหน้าจอ (ทำงานทุกครั้งที่เลขเปลี่ยน)
     socket.on("queue_updated", data => {
         if (data.current) {
             queueEl.innerText = data.current;
         }
     });
 
-    // เมื่อมีการรีเซ็ต
     socket.on("reset_done", () => {
         queueEl.innerText = "--";
     });
