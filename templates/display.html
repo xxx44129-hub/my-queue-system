@@ -4,6 +4,7 @@
     <meta charset="utf-8">
     <title>Queue Display</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
 
     <style>
         body {
@@ -33,6 +34,7 @@
             letter-spacing: 2px;
         }
 
+        /* หน้ากากปลดล็อกเสียงสำหรับ iPhone/iPad */
         #unlock {
             position: fixed;
             inset: 0;
@@ -43,7 +45,7 @@
 
         @keyframes pop {
             0% { transform: scale(1); }
-            50% { transform: scale(1.1); color: #fff; }
+            50% { transform: scale(1.15); color: #fff; }
             100% { transform: scale(1); }
         }
     </style>
@@ -63,48 +65,50 @@
     const queueEl = document.getElementById("queue");
     let unlocked = false;
 
-    // ฟังก์ชันพูดสำหรับหน้า Display
-    function speak(text, customMsg = null) {
-        if (!unlocked) return;
-        window.speechSynthesis.cancel();
+    // ฟังก์ชันเลือกเสียงผู้หญิงไทยให้ iPhone
+    function getFemaleVoice() {
+        const voices = window.speechSynthesis.getVoices();
+        return voices.find(v => v.lang.includes('th') && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Female'))) || 
+               voices.find(v => v.lang.includes('th'));
+    }
 
-        let finalMessage = "";
-        if (customMsg) {
-            finalMessage = customMsg;
-        } else {
-            let digits = text.replace("Q", "").split("").join(" ");
-            finalMessage = "คิว " + digits + " เมนูที่สั่งได้แล้วค่ะ";
-        }
+    function speak(text) {
+        if (!unlocked) return;
+        window.speechSynthesis.cancel(); // ล้างคิวเสียงเก่าทิ้งทันที
+
+        // 🎯 แก้ตามสั่ง: พูดแค่ "คิว" + เลขแยกหลัก (เช่น คิว ศูนย์ ศูนย์ หนึ่ง)
+        let digits = text.replace("Q", "").split("").join(" ");
+        let finalMessage = "คิว " + digits;
 
         const msg = new SpeechSynthesisUtterance(finalMessage);
         msg.lang = 'th-TH';
-        msg.rate = 0.8;
-        
-        const voices = window.speechSynthesis.getVoices();
-        const thaiVoice = voices.find(v => v.lang.startsWith('th'));
-        if (thaiVoice) msg.voice = thaiVoice;
+        msg.rate = 0.9; // ความเร็วระดับปกติ
+        msg.pitch = 1.1; // ปรับโทนแหลมนิดๆ ให้เป็นเสียงผู้หญิงชัดขึ้น
+
+        const voice = getFemaleVoice();
+        if (voice) msg.voice = voice;
 
         window.speechSynthesis.speak(msg);
     }
 
-    // ปลดล็อกเสียง
+    // ปลดล็อกเสียงเมื่อจิ้มหน้าจอครั้งแรก (สำคัญมากสำหรับ iOS)
     document.getElementById("unlock").addEventListener("click", function() {
         unlocked = true;
         this.style.display = "none";
-        const startMsg = new SpeechSynthesisUtterance("เริ่มระบบแสดงผลค่ะ");
+        const startMsg = new SpeechSynthesisUtterance("เริ่มระบบค่ะ");
         startMsg.lang = 'th-TH';
         window.speechSynthesis.speak(startMsg);
     });
 
-    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    window.speechSynthesis.onvoiceschanged = getFemaleVoice;
 
     /* --- Socket Events --- */
 
-    // 🎯 รับคำสั่งเรียกคิวเมื่อ Counter ปิดสวิตช์เสียง (Server จะส่ง Event นี้มา)
+    // รับสัญญาณเรียกคิว (กรณีปิดเสียงหน้า Counter)
     socket.on("call_queue_display", data => {
         queueEl.innerText = data.queue;
         
-        // Animation
+        // ใส่ Animation ให้ตัวเลขเด้ง
         queueEl.style.animation = "none";
         queueEl.offsetHeight; 
         queueEl.style.animation = "pop 0.4s ease-out";
@@ -112,16 +116,22 @@
         speak(data.queue);
     });
 
-    // สำหรับเสียงข้ามออเดอร์ หรือประกาศอื่นๆ
-    socket.on("speak_only", data => {
-        speak(null, data.msg);
-    });
-
-    // อัปเดตตัวเลขหน้าจอ (ทำงานทุกครั้งที่เลขเปลี่ยน)
+    // อัปเดตตัวเลขหน้าจอเฉยๆ (Sync ข้อมูล)
     socket.on("queue_updated", data => {
         if (data.current) {
             queueEl.innerText = data.current;
         }
+    });
+
+    // เสียงแจ้งเตือนอื่นๆ เช่น ข้ามออเดอร์
+    socket.on("speak_only", data => {
+        if (!unlocked) return;
+        window.speechSynthesis.cancel();
+        const msg = new SpeechSynthesisUtterance(data.msg);
+        msg.lang = 'th-TH';
+        const voice = getFemaleVoice();
+        if (voice) msg.voice = voice;
+        window.speechSynthesis.speak(msg);
     });
 
     socket.on("reset_done", () => {
