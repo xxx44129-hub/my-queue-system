@@ -92,21 +92,10 @@
         box-shadow: 0 4px 10px rgba(0,0,0,0.2) inset;
     }
 
-    .next {
-        background: linear-gradient(135deg, #3b82f6, #2563eb);
-    }
-
-    .skip {
-        background: linear-gradient(135deg, #f59e0b, #d97706);
-    }
-
-    .again {
-        background: linear-gradient(135deg, #fbbf24, #f59e0b);
-    }
-
-    .reset {
-        background: linear-gradient(135deg, #ef4444, #dc2626);
-    }
+    .next { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+    .skip { background: linear-gradient(135deg, #f59e0b, #d97706); }
+    .again { background: linear-gradient(135deg, #fbbf24, #f59e0b); }
+    .reset { background: linear-gradient(135deg, #ef4444, #dc2626); }
 
     .voice-control {
         margin-top: 22px;
@@ -128,11 +117,7 @@
         height: 32px;
     }
 
-    .switch input {
-        opacity: 0;
-        width: 0;
-        height: 0;
-    }
+    .switch input { opacity: 0; width: 0; height: 0; }
 
     .slider {
         position: absolute;
@@ -156,13 +141,8 @@
         box-shadow: 0 2px 6px rgba(0,0,0,0.25);
     }
 
-    input:checked + .slider {
-        background-color: #2563eb;
-    }
-
-    input:checked + .slider:before {
-        transform: translateX(24px);
-    }
+    input:checked + .slider { background-color: #2563eb; }
+    input:checked + .slider:before { transform: translateX(24px); }
 </style>
 </head>
 
@@ -191,7 +171,6 @@
     <div class="buttons">
         <button class="next" onclick="handleNext()">เรียกคิวถัดไป</button>
         <button class="skip" onclick="handleSkip()">ข้าม Order</button>
-        
         <button class="again" onclick="handleAgainBtn()">เรียกซ้ำ/คิวที่กรอก</button>
         <button class="reset" onclick="handleReset()">รีเซ็ต</button>
     </div>
@@ -205,23 +184,13 @@ const inputEl = document.getElementById("setQueue");
 const voiceToggle = document.getElementById("voiceToggle");
 let audioUnlocked = false;
 
-/* ==================================
-   ฟังก์ชันปลดล็อกเสียง (จิ้มครั้งแรก)
-   ================================== */
 function unlockAudio() {
     if (audioUnlocked) return;
     const msg = new SpeechSynthesisUtterance("");
     window.speechSynthesis.speak(msg);
     audioUnlocked = true;
-    console.log("Audio System Unlocked");
 }
 
-// ผูกฟังก์ชันปลดล็อกไว้กับตัว Body เพื่อความชัวร์
-document.body.addEventListener('click', unlockAudio, { once: true });
-
-/* ==================================
-   ระบบเสียง (ซ่อมจุดสะดุดบนคอม)
-   ================================== */
 function formatSpeakText(text) {
     if (text.includes("Q")) {
         let rawDigits = text.replace("Q", "");
@@ -245,40 +214,29 @@ function getBestFemaleThaiVoice() {
 function speak(text) {
     if (!voiceToggle.checked) return;
 
-    // เคลียร์เสียงที่ค้างอยู่ก่อนหน้า
     window.speechSynthesis.cancel();
+    const formattedText = formatSpeakText(text);
+    const msg = new SpeechSynthesisUtterance(formattedText);
+    msg.lang = 'th-TH';
+    msg.rate = 0.8;
+    msg.pitch = 1.1;
 
-    // ต้องหน่วงเวลาเล็กน้อย (50ms) เพื่อให้ Browser เคลียร์คิวเสียงเก่าจบจริงๆ
-    setTimeout(() => {
-        const formattedText = formatSpeakText(text);
-        const msg = new SpeechSynthesisUtterance(formattedText);
-        msg.lang = 'th-TH';
-        msg.rate = 0.8;
-        msg.pitch = 1.1;
+    const selectedVoice = getBestFemaleThaiVoice();
+    if (selectedVoice) msg.voice = selectedVoice;
 
-        const selectedVoice = getBestFemaleThaiVoice();
-        if (selectedVoice) msg.voice = selectedVoice;
-
-        window.speechSynthesis.speak(msg);
-    }, 50);
+    window.speechSynthesis.speak(msg);
 }
 
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
-/* ==================================
-   Logic ควบคุม
-   ================================== */
 function handleNext() {
     unlockAudio();
     let currentStr = currentEl.innerText;
     let nextNum = 1;
-
     if (currentStr !== "--") {
         nextNum = parseInt(currentStr.substring(1)) + 1;
     }
-
     if (nextNum > 500) nextNum = 1; 
-
     const nextQ = "Q" + String(nextNum).padStart(3, '0');
     socket.emit("set_queue", { queue: nextQ });
 }
@@ -313,12 +271,9 @@ function handleReset() {
     }
 }
 
-/* ==================================
-   Socket Events
-   ================================== */
 socket.on("call_queue", data => {
     currentEl.innerText = data.queue;
-    speak(data.msg);
+    speak(data.queue); // 🎯 อ้างอิง data.queue ตรงๆ ตามที่เคยดัง
 });
 
 socket.on("speak_only", data => {
