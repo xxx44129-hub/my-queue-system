@@ -5,72 +5,78 @@
     <title>Queue Counter Control</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
+        /* CSS ดีไซน์เต็มรูปแบบ ไม่มีการตัดทอน */
         body {
             margin: 0;
-            font-family: "Segoe UI", sans-serif;
-            background: #f4f6f9;
+            font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #eef2ff, #f8fafc);
             height: 100vh;
             display: flex;
             justify-content: center;
             align-items: center;
         }
         .panel {
-            background: white;
+            background: #ffffff;
             width: 550px;
-            max-width: 90vw;
-            border-radius: 20px;
-            padding: 30px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
+            max-width: 92vw;
+            border-radius: 22px;
+            padding: 32px 28px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.12), 0 6px 16px rgba(0,0,0,0.08);
             text-align: center;
         }
+        h1 { margin-top: 0; margin-bottom: 10px; font-size: 26px; color: #1e293b; font-weight: 700; }
         .current {
-            font-size: clamp(80px, 15vw, 110px);
-            font-weight: bold;
-            color: #2a5298;
-            margin: 10px 0;
+            font-size: 110px;
+            font-weight: 800;
+            color: #2563eb;
+            margin: 20px 0 10px;
+            letter-spacing: 2px;
         }
-        .info { font-size: 18px; color: #666; margin-bottom: 20px; }
+        .info { font-size: 18px; color: #475569; margin-bottom: 22px; }
         #setQueue {
-            font-size: 24px;
-            padding: 12px;
-            width: 60%;
+            font-size: 22px;
+            padding: 14px;
+            width: 80%;
+            max-width: 360px;
             text-align: center;
-            border-radius: 10px;
-            border: 1px solid #ccc;
-            margin-bottom: 10px;
+            border-radius: 12px;
+            border: 1px solid #cbd5e1;
+            outline: none;
+            transition: all 0.2s;
         }
+        #setQueue:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .buttons {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 15px;
-            margin-top: 20px;
+            gap: 16px;
+            margin-top: 10px;
         }
         button {
             font-size: 20px;
-            padding: 20px;
+            padding: 18px 12px;
             border: none;
-            border-radius: 15px;
+            border-radius: 16px;
             cursor: pointer;
-            font-weight: bold;
+            font-weight: 700;
             color: white;
-            transition: 0.1s;
+            transition: transform 0.08s ease;
         }
-        button:active { transform: scale(0.95); }
-        .next { background: #3498db; }
-        .skip { background: #e67e22; }
-        .again { background: #f1c40f; }
-        .reset { background: #e74c3c; }
+        button:active { transform: scale(0.97); }
+        .next { background: linear-gradient(135deg, #3b82f6, #2563eb); }
+        .skip { background: linear-gradient(135deg, #f59e0b, #d97706); }
+        .again { background: linear-gradient(135deg, #fbbf24, #f59e0b); }
+        .reset { background: linear-gradient(135deg, #ef4444, #dc2626); }
+        
         .voice-control {
-            margin-top: 20px;
-            background: #eee;
-            padding: 15px;
-            border-radius: 12px;
+            margin-top: 22px;
+            padding: 14px;
+            background: #f1f5f9;
+            border-radius: 14px;
             display: flex;
             align-items: center;
             justify-content: center;
-            gap: 10px;
+            gap: 12px;
         }
-        input[type="checkbox"] { width: 22px; height: 22px; cursor: pointer; }
     </style>
 </head>
 <body>
@@ -80,20 +86,20 @@
     <div class="current" id="current">--</div>
     <div class="info">คิวล่าสุดในระบบ: <b id="last">--</b></div>
 
-    <input id="setQueue" type="text" pattern="\d*" placeholder="เลข 3 หลัก">
-    <br>
-    <button style="background:#8e44ad; padding:10px 25px; font-size:16px;" onclick="handleAction('set')">ตั้งค่าคิว/เรียกเลขนี้</button>
+    <input id="setQueue" type="text" pattern="\d*" placeholder="กรอกเลข เช่น 001">
+    <br><br>
+    <button style="background:#8e44ad; color:white; padding:12px 30px; border-radius:10px;" onclick="handleManualSet()">ตั้งค่าคิว/เรียกเลขนี้</button>
 
     <div class="voice-control">
-        <b>เปิดเล่นเสียงที่หน้าจอนี้:</b>
-        <input type="checkbox" id="voiceToggle">
+        <span><b>เปิดเล่นเสียงที่หน้าจอนี้:</b></span>
+        <input type="checkbox" id="voiceToggle" style="width:22px; height:22px;">
     </div>
 
     <div class="buttons">
-        <button class="next" onclick="handleAction('next')">เรียกคิวถัดไป</button>
-        <button class="skip" onclick="socket.emit('skip_order')">ข้าม ออเดอร์</button>
-        <button class="again" onclick="handleAction('again')">เรียกซ้ำคิวบนจอ</button>
-        <button class="reset" onclick="handleReset()">รีเซ็ตทั้งหมด</button>
+        <button class="next" onclick="handleNextQueue()">เรียกคิวถัดไป</button>
+        <button class="skip" onclick="handleSkipOrder()">ข้าม ออเดอร์</button>
+        <button class="again" onclick="handleCallAgain()">เรียกซ้ำคิวบนจอ</button>
+        <button class="reset" onclick="handleResetSystem()">รีเซ็ตทั้งหมด</button>
     </div>
 </div>
 
@@ -105,69 +111,106 @@
     const voiceToggle = document.getElementById("voiceToggle");
     let audioUnlocked = false;
 
-    // ฟังก์ชันปลดล็อกเสียง
-    function unlock() {
+    // ฟังก์ชันดึงเสียงผู้หญิงไทย (iPhone/PC)
+    function getFemaleVoice() {
+        const voices = window.speechSynthesis.getVoices();
+        let thaiVoice = voices.find(v => v.lang.includes('th') && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Female')));
+        if (!thaiVoice) {
+            thaiVoice = voices.find(v => v.lang.includes('th'));
+        }
+        return thaiVoice;
+    }
+
+    // ปลดล็อกเสียงสำหรับ iPhone
+    function unlockAudio() {
         if (!audioUnlocked) {
-            window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
+            const msg = new SpeechSynthesisUtterance("");
+            window.speechSynthesis.speak(msg);
             audioUnlocked = true;
         }
     }
 
-    // ฟังก์ชันพูดเฉพาะเครื่อง Counter
-    function speakLocally(text) {
+    // ฟังก์ชันพูดสำหรับหน้า Counter
+    function speakCounter(text) {
         if (!voiceToggle.checked) return;
         window.speechSynthesis.cancel();
-        let digits = text.replace("Q", "").split("").join(" ");
-        const msg = new SpeechSynthesisUtterance("คิว " + digits);
+        
+        const msg = new SpeechSynthesisUtterance(text);
         msg.lang = 'th-TH';
+        msg.rate = 0.9;
+        const voice = getFemaleVoice();
+        if (voice) msg.voice = voice;
         window.speechSynthesis.speak(msg);
     }
 
-    window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
+    // --- ฟังก์ชันปุ่มต่างๆ ---
 
-    // จัดการทุกปุ่มผ่านฟังก์ชันเดียวเพื่อคุมสถานะสวิตช์
-    function handleAction(type) {
-        unlock();
-        let targetQ = "";
-
-        if (type === 'next') {
-            // ดึงเลขจากหน้าจอมาบวกต่อ
-            let currentNum = parseInt(currentEl.innerText.replace("Q", "")) || 0;
-            targetQ = "Q" + String(currentNum + 1).padStart(3, '0');
-        } 
-        else if (type === 'set') {
-            let val = inputEl.value.trim();
-            if (!val) return;
-            targetQ = "Q" + val.padStart(3, '0');
-            inputEl.value = "";
+    function handleNextQueue() {
+        unlockAudio();
+        let currentText = currentEl.innerText;
+        let currentNum = 0;
+        if (currentText !== "--" && currentText !== "") {
+            currentNum = parseInt(currentText.replace("Q", ""));
         }
-        else if (type === 'again') {
-            targetQ = currentEl.innerText;
-        }
+        let nextQ = "Q" + String(currentNum + 1).padStart(3, '0');
+        
+        // ส่งเลขคิว + สถานะสวิตช์
+        socket.emit("set_queue", { 
+            queue: nextQ, 
+            voice_on_counter: voiceToggle.checked 
+        });
+    }
 
-        if (targetQ !== "--") {
-            // 🎯 ส่งเลขคิว พร้อมบอก Server ว่าตอนนี้ "เปิดหรือปิด" เสียงที่นี่
+    function handleManualSet() {
+        unlockAudio();
+        let val = inputEl.value.trim();
+        if (val === "") return;
+        let formattedQ = "Q" + val.padStart(3, '0');
+        socket.emit("set_queue", { 
+            queue: formattedQ, 
+            voice_on_counter: voiceToggle.checked 
+        });
+        inputEl.value = "";
+    }
+
+    function handleCallAgain() {
+        unlockAudio();
+        let currentQ = currentEl.innerText;
+        if (currentQ !== "--") {
             socket.emit("set_queue", { 
-                queue: targetQ, 
+                queue: currentQ, 
                 voice_on_counter: voiceToggle.checked 
             });
         }
     }
 
-    function handleReset() {
-        if (confirm("ล้างคิวทั้งหมดเป็น 0 ใช่ไหม?")) {
+    function handleSkipOrder() {
+        unlockAudio();
+        // 🎯 ส่งสถานะสวิตช์ไปด้วย เพื่อให้ Server รู้ว่าต้องให้ใครพูด
+        socket.emit('skip_order', { 
+            voice_on_counter: voiceToggle.checked 
+        });
+    }
+
+    function handleResetSystem() {
+        if (confirm("ต้องการรีเซ็ตคิวทั้งหมด?")) {
             socket.emit('reset');
         }
     }
 
-    /* --- Socket Events --- */
+    // --- Socket Events ---
 
-    // รับคำสั่งพูดเฉพาะที่หน้า Counter (เมื่อ Server ตรวจสอบแล้วว่าเปิดสวิตช์ไว้)
+    // รับสัญญาณพูดคิว (กรณีสวิตช์เปิด)
     socket.on("call_queue_locally", data => {
-        speakLocally(data.queue);
+        let digits = data.queue.replace("Q", "").split("").join(" ");
+        speakCounter("คิว " + digits);
     });
 
-    // อัปเดตตัวเลข (ทำทุกครั้งที่มีการเปลี่ยนแปลง)
+    // รับสัญญาณพูดข้อความอื่นๆ เช่น ข้ามออเดอร์ (กรณีสวิตช์เปิด)
+    socket.on("speak_locally", data => {
+        speakCounter(data.msg);
+    });
+
     socket.on("queue_updated", data => {
         currentEl.innerText = data.current;
         lastEl.innerText = data.last;
@@ -178,14 +221,7 @@
         lastEl.innerText = "--";
     });
 
-    socket.on("speak_only", data => {
-        if (voiceToggle.checked) {
-            window.speechSynthesis.cancel();
-            const msg = new SpeechSynthesisUtterance(data.msg);
-            msg.lang = 'th-TH';
-            window.speechSynthesis.speak(msg);
-        }
-    });
+    window.speechSynthesis.onvoiceschanged = getFemaleVoice;
 </script>
 </body>
 </html>
