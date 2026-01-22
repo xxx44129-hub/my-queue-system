@@ -229,23 +229,23 @@ function speak(text) {
 window.speechSynthesis.onvoiceschanged = () => window.speechSynthesis.getVoices();
 
 /* ==================================
-   Logic ควบคุม (กดถัดไปแล้วรันเลข + พูดทันที ไม่หยุด)
+   Logic ปุ่มถัดไป: กดแล้วรันเลข + พูดทันที
    ================================== */
 function handleNext() {
     unlockAudio();
     let currentStr = currentEl.innerText;
     let nextNum = 1;
 
-    // รันเลขต่อไปเรื่อยๆ ไม่ต้องสนคิวล่าสุด
-    if (currentStr !== "--") {
-        nextNum = parseInt(currentStr.substring(1)) + 1;
+    // รันเลขต่อไปเรื่อยๆ จากเลขบนจอ
+    if (currentStr !== "--" && currentStr !== "") {
+        nextNum = parseInt(currentStr.replace("Q", "")) + 1;
     }
     
-    if (nextNum > 999) nextNum = 1; // วนกลับเมื่อถึง 999
+    if (nextNum > 999) nextNum = 1;
 
     const nextQ = "Q" + String(nextNum).padStart(3, '0');
     
-    // 🎯 ส่งไป set_queue เพื่อให้ Server สั่ง call_queue กลับมาที่ทุกจอพร้อมเสียง
+    // 🎯 หัวใจสำคัญ: ส่งสัญญาณตั้งคิว เพื่อให้เซิร์ฟเวอร์สั่งเรียกคิวกลับมาที่ทุกจอพร้อมเสียง
     socket.emit("set_queue", { queue: nextQ });
 }
 
