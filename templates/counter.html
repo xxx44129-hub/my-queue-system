@@ -5,7 +5,7 @@
     <title>Queue Counter Control</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
-        /* CSS ดีไซน์เต็มรูปแบบ กูคงเดิมไว้ให้ 100% */
+        /* CSS ดีไซน์จัดเต็ม ห้ามตัด! */
         body {
             margin: 0;
             font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -44,7 +44,6 @@
             outline: none;
             transition: all 0.2s;
         }
-        #setQueue:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37,99,235,0.1); }
         .buttons {
             display: grid;
             grid-template-columns: 1fr 1fr;
@@ -66,7 +65,6 @@
         .skip { background: linear-gradient(135deg, #f59e0b, #d97706); }
         .again { background: linear-gradient(135deg, #fbbf24, #f59e0b); }
         .reset { background: linear-gradient(135deg, #ef4444, #dc2626); }
-        
         .voice-control {
             margin-top: 22px;
             padding: 14px;
@@ -76,8 +74,6 @@
             align-items: center;
             justify-content: center;
             gap: 12px;
-            font-size: 15px;
-            color: #334155;
         }
     </style>
 </head>
@@ -112,65 +108,54 @@
     const inputEl = document.getElementById("setQueue");
     const voiceToggle = document.getElementById("voiceToggle");
     
-    // โหลดไฟล์เสียง Beep จาก static
     const beepAudio = new Audio("/static/beep.mp3");
     let audioUnlocked = false;
 
-    // ฟังก์ชันดึงเสียงผู้หญิงไทย
     function getFemaleVoice() {
         const voices = window.speechSynthesis.getVoices();
-        let thaiVoice = voices.find(v => v.lang.includes('th') && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Female')));
-        if (!thaiVoice) {
-            thaiVoice = voices.find(v => v.lang.includes('th'));
-        }
-        return thaiVoice;
+        return voices.find(v => v.lang.includes('th') && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Female'))) || voices.find(v => v.lang.includes('th'));
     }
 
-    // ปลดล็อกเสียง (ต้องรันตอนกดปุ่มเพื่อให้ iPhone ยอมให้เล่นเสียง)
+    // ปลดล็อกลำโพง iPhone
     function unlockAudio() {
         if (!audioUnlocked) {
-            // เล่น Beep สั้นๆ เพื่อปลดล็อกลำโพง
-            beepAudio.play().then(() => {
-                beepAudio.pause();
-                beepAudio.currentTime = 0;
-            }).catch(e => console.log("Unlock failed"));
+            beepAudio.play().then(() => { beepAudio.pause(); beepAudio.currentTime = 0; });
+            const silent = new SpeechSynthesisUtterance("");
+            window.speechSynthesis.speak(silent);
             audioUnlocked = true;
         }
     }
 
-    // ฟังก์ชันพูดสำหรับเครื่อง Counter (มี Beep นำ)
+    // ฟังก์ชันพูดที่แก้บั๊ก iPhone (กระดิ่ง + พูด พร้อมกัน)
     function speakLocally(text, isDirectMsg = false) {
         if (!voiceToggle.checked) return;
+        
         window.speechSynthesis.cancel();
         
-        beepAudio.play().then(() => {
-            setTimeout(() => {
-                let finalSpeech = text;
-                if (!isDirectMsg) {
-                    let digits = text.replace("Q", "").split("").join(" ");
-                    finalSpeech = "คิว " + digits;
-                }
-                
-                const msg = new SpeechSynthesisUtterance(finalSpeech);
-                msg.lang = 'th-TH';
-                msg.rate = 0.9;
-                const voice = getFemaleVoice();
-                if (voice) msg.voice = voice;
-                window.speechSynthesis.speak(msg);
-            }, 800); // รอ Beep 0.8 วิ
-        });
-    }
+        let finalSpeech = text;
+        if (!isDirectMsg) {
+            let digits = text.replace("Q", "").split("").join(" ");
+            finalSpeech = ", , , คิว " + digits; // คอมม่าช่วยหน่วงเวลาให้กระดิ่งจบก่อน
+        } else {
+            finalSpeech = ", , , " + text;
+        }
 
-    // --- ฟังก์ชันจัดการปุ่มกด ---
+        const msg = new SpeechSynthesisUtterance(finalSpeech);
+        msg.lang = 'th-TH';
+        msg.rate = 0.9;
+        const voice = getFemaleVoice();
+        if (voice) msg.voice = voice;
+
+        // สั่งพร้อมกันเพื่อหลอก iPhone Policy
+        beepAudio.play().catch(e => console.log("Beep error"));
+        window.speechSynthesis.speak(msg);
+    }
 
     function handleNextQueue() {
         unlockAudio();
         let currentText = currentEl.innerText;
-        let currentNum = 0;
-        if (currentText !== "--" && currentText !== "") {
-            currentNum = parseInt(currentText.replace("Q", ""));
-        }
-        let nextQ = "Q" + String(currentNum + 1).padStart(3, '0');
+        let nextNum = (currentText === "--" || currentText === "") ? 1 : parseInt(currentText.replace("Q", "")) + 1;
+        let nextQ = "Q" + String(nextNum).padStart(3, '0');
         socket.emit("set_queue", { queue: nextQ, voice_on_counter: voiceToggle.checked });
     }
 
@@ -178,16 +163,14 @@
         unlockAudio();
         let val = inputEl.value.trim();
         if (val === "") return;
-        let formattedQ = "Q" + val.padStart(3, '0');
-        socket.emit("set_queue", { queue: formattedQ, voice_on_counter: voiceToggle.checked });
+        socket.emit("set_queue", { queue: "Q" + val.padStart(3, '0'), voice_on_counter: voiceToggle.checked });
         inputEl.value = "";
     }
 
     function handleCallAgain() {
         unlockAudio();
-        let currentQ = currentEl.innerText;
-        if (currentQ !== "--") {
-            socket.emit("set_queue", { queue: currentQ, voice_on_counter: voiceToggle.checked });
+        if (currentEl.innerText !== "--") {
+            socket.emit("set_queue", { queue: currentEl.innerText, voice_on_counter: voiceToggle.checked });
         }
     }
 
@@ -197,30 +180,13 @@
     }
 
     function handleResetSystem() {
-        if (confirm("ต้องการรีเซ็ตคิวทั้งหมดเป็น 0?")) {
-            socket.emit('reset');
-        }
+        if (confirm("รีเซ็ตคิวทั้งหมด?")) socket.emit('reset');
     }
 
-    // --- Socket Events ---
-
-    socket.on("call_queue_locally", data => {
-        speakLocally(data.queue, false);
-    });
-
-    socket.on("speak_locally", data => {
-        speakLocally(data.msg, true);
-    });
-
-    socket.on("queue_updated", data => {
-        currentEl.innerText = data.current;
-        lastEl.innerText = data.last;
-    });
-
-    socket.on("reset_done", () => {
-        currentEl.innerText = "--";
-        lastEl.innerText = "--";
-    });
+    socket.on("call_queue_locally", data => speakLocally(data.queue, false));
+    socket.on("speak_locally", data => speakLocally(data.msg, true));
+    socket.on("queue_updated", data => { currentEl.innerText = data.current; lastEl.innerText = data.last; });
+    socket.on("reset_done", () => { currentEl.innerText = "--"; lastEl.innerText = "--"; });
 
     window.speechSynthesis.onvoiceschanged = getFemaleVoice;
 </script>
