@@ -93,7 +93,6 @@
     const queueElement = document.getElementById("queue-display");
     const unlockScreen = document.getElementById("unlock-screen");
     
-    // ดึงไฟล์เสียง Beep
     const beepAudio = new Audio("/static/beep.mp3");
     let isAudioUnlocked = false;
 
@@ -104,7 +103,7 @@
                || voices.find(v => v.lang.includes('th'));
     }
 
-    // ฟังก์ชันปลดล็อก (User Gesture)
+    // ปลดล็อก (User Gesture)
     function handleUnlockAudio() {
         isAudioUnlocked = true;
         unlockScreen.style.display = "none";
@@ -115,78 +114,69 @@
             beepAudio.currentTime = 0;
         });
         
-        const welcome = new SpeechSynthesisUtterance("ระบบพร้อมใช้งานค่ะ");
+        const welcome = new SpeechSynthesisUtterance("ระบบพร้อมค่ะ");
         welcome.lang = 'th-TH';
         window.speechSynthesis.speak(welcome);
     }
 
-    // ฟังก์ชันพูดที่แก้บั๊ก iPhone และเว้นช่วงเสียงกระดิ่ง
-    function playQueueVoice(queueText) {
+    // ฟังก์ชันหัวใจหลัก: เล่นกระดิ่งให้จบก่อน (1 วินาที) แล้วค่อยพูด
+    function playBeepThenSpeak(textToSpeak) {
         if (!isAudioUnlocked) return;
 
-        // เคลียร์เสียงที่ค้างอยู่
+        // หยุดเสียงที่พูดค้างอยู่ทั้งหมด
         window.speechSynthesis.cancel();
 
-        // จัดรูปแบบเลขคิวแยกหลัก
-        let digits = queueText.replace("Q", "").split("").join(" ");
+        // ตั้งค่าเสียงกระดิ่งใหม่ทุกครั้งที่เรียก
+        beepAudio.currentTime = 0;
         
-        // 🎯 เพิ่มคอมม่า ( , ) เพื่อเว้นจังหวะให้ beep เล่นจบก่อน
-        // ถ้ากระดิ่งมึงยาวมาก ให้เติมคอมม่าเข้าไปอีกได้
-        const msg = new SpeechSynthesisUtterance(", , , , , , , , , , คิว " + digits);
-        msg.lang = 'th-TH';
-        msg.rate = 0.9; // ความเร็วปกติ
-        
-        const voice = findThaiFemaleVoice();
-        if (voice) msg.voice = voice;
+        // เมื่อกระดิ่งเล่นจบ (onended) ถึงจะเริ่มสั่งพูด
+        beepAudio.onended = function() {
+            const msg = new SpeechSynthesisUtterance(textToSpeak);
+            msg.lang = 'th-TH';
+            msg.rate = 1.0;
+            const voice = findThaiFemaleVoice();
+            if (voice) msg.voice = voice;
+            window.speechSynthesis.speak(msg);
+        };
 
-        // สั่งทำงานพร้อมกัน (Sync) เพื่อให้ iPhone ไม่บล็อกเสียงพูด
-        beepAudio.play().catch(e => console.log("Beep error:", e));
-        window.speechSynthesis.speak(msg);
+        // เริ่มเล่นกระดิ่ง
+        beepAudio.play().catch(e => {
+            console.log("Beep error:", e);
+            // ถ้าเล่นกระดิ่งไม่ได้ ให้พูดเลยเพื่อไม่ให้คิวค้าง
+            const msg = new SpeechSynthesisUtterance(textToSpeak);
+            msg.lang = 'th-TH';
+            window.speechSynthesis.speak(msg);
+        });
     }
 
     /* --- Socket Events --- */
 
-    // รับสัญญาณเรียกคิว
     socket.on("call_queue_display", function(data) {
         let q = data.queue;
         queueElement.innerText = q;
         
-        // อนิเมชั่นตัวเลขเด้ง
+        // อนิเมชั่นตัวเลข
         queueElement.classList.remove("animate-pop");
         void queueElement.offsetWidth; 
         queueElement.classList.add("animate-pop");
         
-        playQueueVoice(q);
+        let digits = q.replace("Q", "").split("").join(" ");
+        playBeepThenSpeak("คิว " + digits);
     });
 
-    // รับสัญญาณประกาศอื่นๆ (เช่น ข้ามออเดอร์)
     socket.on("speak_only", function(data) {
-        if (!isAudioUnlocked) return;
-        window.speechSynthesis.cancel();
-        
-        const msg = new SpeechSynthesisUtterance(", , , , , , , , , , " + data.msg);
-        msg.lang = 'th-TH';
-        const voice = findThaiFemaleVoice();
-        if (voice) msg.voice = voice;
-        
-        beepAudio.play().catch(e => console.log("Beep error:", e));
-        window.speechSynthesis.speak(msg);
+        playBeepThenSpeak(data.msg);
     });
 
-    // อัปเดตตัวเลขหน้าจอปกติ
     socket.on("queue_updated", data => {
         if (data.current) queueElement.innerText = data.current;
     });
 
-    // รีเซ็ตคิว
     socket.on("reset_done", () => {
         queueElement.innerText = "--";
     });
 
-    // โหลดเสียงเตรียมไว้
     window.speechSynthesis.onvoiceschanged = findThaiFemaleVoice;
 </script>
 </body>
 </html>
-
-
