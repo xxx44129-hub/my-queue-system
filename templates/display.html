@@ -4,11 +4,8 @@
     <meta charset="utf-8">
     <title>Queue Display System</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
-    
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
-    
     <style>
-        /* CSS จัดเต็ม ดีไซน์หรูเหมือนเดิม */
         body {
             margin: 0;
             font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
@@ -21,21 +18,19 @@
             overflow: hidden;
         }
 
-        .container {
-            text-align: center;
-        }
+        .container { text-align: center; }
 
         .queue-label {
             font-size: 50px;
             color: #e0e0e0;
-            margin-bottom: -20px;
+            margin-bottom: -10px;
             font-weight: 300;
         }
 
         .queue {
             font-size: clamp(120px, 30vw, 280px);
             font-weight: 900;
-            color: #ffd700; /* สีทองแจ่มๆ */
+            color: #ffd700;
             text-shadow: 0 15px 30px rgba(0,0,0,0.6);
             margin: 0;
         }
@@ -48,14 +43,11 @@
             font-weight: 400;
         }
 
-        /* หน้ากากสำหรับให้ iPhone ปลดล็อกเสียง (ต้องแตะ 1 ครั้ง) */
+        /* หน้ากากปลดล็อกเสียง (iOS บังคับ) */
         #unlock-screen {
             position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.85);
+            inset: 0;
+            background: rgba(0,0,0,0.9);
             color: white;
             display: flex;
             flex-direction: column;
@@ -66,31 +58,28 @@
         }
 
         .unlock-button {
-            padding: 20px 40px;
+            padding: 25px 50px;
             background: #ffd700;
             color: black;
-            font-size: 28px;
+            font-size: 30px;
             font-weight: bold;
-            border-radius: 50px;
-            box-shadow: 0 0 20px rgba(255,215,0,0.5);
+            border-radius: 60px;
+            box-shadow: 0 0 30px rgba(255,215,0,0.4);
         }
 
-        /* Animation เวลาเลขเปลี่ยน */
-        @keyframes blink {
-            0% { transform: scale(1); opacity: 1; }
-            50% { transform: scale(1.1); opacity: 0.8; color: #fff; }
-            100% { transform: scale(1); opacity: 1; }
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); color: #fff; }
+            100% { transform: scale(1); }
         }
-        .animate-pop {
-            animation: blink 0.5s ease-out;
-        }
+        .animate-pop { animation: pop 0.5s ease-out; }
     </style>
 </head>
 <body>
 
 <div id="unlock-screen" onclick="handleUnlockAudio()">
-    <div class="unlock-button">แตะหน้าจอเพื่อเปิดเสียง (iPhone)</div>
-    <p style="margin-top: 20px; font-size: 18px;">เพื่อความเสถียรของระบบเสียงกรุณาแตะ 1 ครั้ง</p>
+    <div class="unlock-button">แตะหน้าจอเพื่อเริ่มระบบ (เสียง)</div>
+    <p style="margin-top: 20px; font-size: 20px; color: #ccc;">กรุณาแตะ 1 ครั้งเพื่อให้เสียงทำงานบน iPhone</p>
 </div>
 
 <div class="container">
@@ -103,107 +92,99 @@
     const socket = io();
     const queueElement = document.getElementById("queue-display");
     const unlockScreen = document.getElementById("unlock-screen");
-    let isAudioActive = false;
+    
+    // โหลดไฟล์เสียง Beep จาก static
+    const beepAudio = new Audio("/static/beep.mp3");
+    let isAudioUnlocked = false;
 
-    // ฟังก์ชันค้นหาเสียงผู้หญิงไทยแบบเน้นๆ ให้ iPhone
+    // ค้นหาเสียงผู้หญิงไทย
     function findThaiFemaleVoice() {
-        const allVoices = window.speechSynthesis.getVoices();
-        // ค้นหาเสียง Kanya, Narisa หรือเสียงที่มีคำว่า Female ในภาษาไทย
-        let voice = allVoices.find(v => v.lang.includes('th') && (v.name.includes('Female') || v.name.includes('Kanya') || v.name.includes('Narisa')));
-        
-        // ถ้าไม่เจอจริงๆ เอาเสียงไทยตัวไหนก็ได้
-        if (!voice) {
-            voice = allVoices.find(v => v.lang.includes('th'));
-        }
-        return voice;
+        const voices = window.speechSynthesis.getVoices();
+        return voices.find(v => v.lang.includes('th') && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Female'))) 
+               || voices.find(v => v.lang.includes('th'));
     }
 
-    // ฟังก์ชันปลดล็อก (ต้องรันตอน User Gesture เท่านั้น)
+    // ฟังก์ชันปลดล็อกเสียงสำหรับ iPhone
     function handleUnlockAudio() {
-        isAudioActive = true;
+        isAudioUnlocked = true;
         unlockScreen.style.display = "none";
         
-        // ทดสอบพูดเพื่อปลดล็อก Browser ลำโพง
-        const welcome = new SpeechSynthesisUtterance("ระบบแสดงผลเริ่มทำงานค่ะ");
+        // ทดสอบเล่นเสียงสั้นๆ เพื่อเปิดทางลำโพง
+        beepAudio.play().then(() => {
+            beepAudio.pause();
+            beepAudio.currentTime = 0;
+        }).catch(e => console.log("Audio unlock failed:", e));
+        
+        const welcome = new SpeechSynthesisUtterance("ระบบเริ่มทำงานค่ะ");
         welcome.lang = 'th-TH';
         window.speechSynthesis.speak(welcome);
     }
 
-    // ฟังก์ชันหลักในการพูด (พูดเฉพาะ "คิว + เลข")
-    function playQueueVoice(queueNumber) {
-        if (!isAudioActive) return;
+    // ฟังก์ชัน: เล่นเสียง Beep แล้วค่อยพูดคิว
+    function playQueueVoice(queueText) {
+        if (!isAudioUnlocked) return;
 
-        // หยุดเสียงที่กำลังพูดค้างอยู่ทั้งหมดทันที
+        // หยุดเสียงที่พูดค้างอยู่ทั้งหมด
         window.speechSynthesis.cancel();
 
-        // แปลงเลขคิวให้อ่านแยกหลัก เช่น Q001 -> คิว ศูนย์ ศูนย์ หนึ่ง
-        let rawNumber = queueNumber.replace("Q", "");
-        let separatedDigits = rawNumber.split("").join(" ");
-        let speechText = "คิว " + separatedDigits;
-
-        const utterance = new SpeechSynthesisUtterance(speechText);
-        utterance.lang = 'th-TH';
-        utterance.rate = 0.85; // ความเร็วพอดีๆ ไม่ช้าไม่เร็ว
-        utterance.pitch = 1.0; // โทนเสียงปกติ
-
-        // ใส่เสียงผู้หญิงไทย
-        const femaleVoice = findThaiFemaleVoice();
-        if (femaleVoice) {
-            utterance.voice = femaleVoice;
-        }
-
-        // สั่งให้พูด
-        window.speechSynthesis.speak(utterance);
+        // 1. เล่นเสียง Beep
+        beepAudio.play().then(() => {
+            // 2. รอจังหวะนิดนึงให้ Beep นำก่อนแล้วค่อยพูด (ปรับ 800ms ตามใจชอบ)
+            setTimeout(() => {
+                // อ่านแยกหลัก: คิว ศูนย์ ศูนย์ หนึ่ง
+                let digits = queueText.replace("Q", "").split("").join(" ");
+                const msg = new SpeechSynthesisUtterance("คิว " + digits);
+                msg.lang = 'th-TH';
+                msg.rate = 0.9;
+                
+                const voice = findThaiFemaleVoice();
+                if (voice) msg.voice = voice;
+                
+                window.speechSynthesis.speak(msg);
+            }, 800); 
+        }).catch(e => console.log("Beep error:", e));
     }
 
-    // --- ส่วนรับสัญญาณจาก Socket.io ---
+    /* --- รับสัญญาณ Socket --- */
 
-    // เมื่อได้รับคำสั่งให้ "ดังที่หน้า Display"
+    // รับสัญญาณเมื่อเคาน์เตอร์ "ปิด" สวิตช์เสียง
     socket.on("call_queue_display", function(data) {
-        let newQueue = data.queue;
+        let q = data.queue;
+        queueElement.innerText = q;
         
-        // แสดงเลขบนหน้าจอ
-        queueElement.innerText = newQueue;
-        
-        // ใส่เอฟเฟกต์กระพริบ
+        // เอฟเฟกต์ตัวเลขเด้ง
         queueElement.classList.remove("animate-pop");
-        void queueElement.offsetWidth; // trigger reflow
+        void queueElement.offsetWidth;
         queueElement.classList.add("animate-pop");
         
-        // 🎯 สั่งพูด (พูดแค่ "คิว + เลข" ตามที่มึงสั่ง)
-        playQueueVoice(newQueue);
+        playQueueVoice(q);
     });
 
-    // อัปเดตตัวเลขหน้าจอเฉยๆ (กรณี Sync ข้อมูล)
-    socket.on("queue_updated", function(data) {
-        if (data.current) {
-            queueElement.innerText = data.current;
-        }
-    });
-
-    // กรณีมีข้อความประกาศพิเศษ (เช่น ข้ามออเดอร์)
+    // รับสัญญาณข้ามออเดอร์ หรือประกาศอื่นๆ
     socket.on("speak_only", function(data) {
-        if (!isAudioActive) return;
+        if (!isAudioUnlocked) return;
         window.speechSynthesis.cancel();
         
-        const announce = new SpeechSynthesisUtterance(data.msg);
-        announce.lang = 'th-TH';
-        
-        const voice = findThaiFemaleVoice();
-        if (voice) announce.voice = voice;
-        
-        window.speechSynthesis.speak(announce);
+        beepAudio.play().then(() => {
+            setTimeout(() => {
+                const msg = new SpeechSynthesisUtterance(data.msg);
+                msg.lang = 'th-TH';
+                const voice = findThaiFemaleVoice();
+                if (voice) msg.voice = voice;
+                window.speechSynthesis.speak(msg);
+            }, 800);
+        });
     });
 
-    // รีเซ็ตหน้าจอ
-    socket.on("reset_done", function() {
+    socket.on("queue_updated", data => {
+        if (data.current) queueElement.innerText = data.current;
+    });
+
+    socket.on("reset_done", () => {
         queueElement.innerText = "--";
     });
 
-    // โหลดเสียงเตรียมไว้ให้พร้อม
-    window.speechSynthesis.onvoiceschanged = function() {
-        findThaiFemaleVoice();
-    };
+    window.speechSynthesis.onvoiceschanged = findThaiFemaleVoice;
 </script>
 </body>
 </html>
