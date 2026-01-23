@@ -116,7 +116,7 @@
         return voices.find(v => v.lang.includes('th') && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Female'))) || voices.find(v => v.lang.includes('th'));
     }
 
-    // ปลดล็อกลำโพง iPhone
+    // ปลดล็อกเสียงสำหรับ iPhone
     function unlockAudio() {
         if (!audioUnlocked) {
             beepAudio.play().then(() => { beepAudio.pause(); beepAudio.currentTime = 0; });
@@ -135,9 +135,10 @@
         let finalSpeech = text;
         if (!isDirectMsg) {
             let digits = text.replace("Q", "").split("").join(" ");
-            finalSpeech = ", , , คิว " + digits; // คอมม่าช่วยหน่วงเวลาให้กระดิ่งจบก่อน
+            // 🎯 ใส่คอมม่า ( , ) เยอะๆ เพื่อถ่างช่วงเวลาให้กระดิ่งจบก่อนพูด
+            finalSpeech = ", , , , , , , คิว " + digits;
         } else {
-            finalSpeech = ", , , " + text;
+            finalSpeech = ", , , , , , , " + text;
         }
 
         const msg = new SpeechSynthesisUtterance(finalSpeech);
@@ -146,7 +147,7 @@
         const voice = getFemaleVoice();
         if (voice) msg.voice = voice;
 
-        // สั่งพร้อมกันเพื่อหลอก iPhone Policy
+        // สั่งทำงานพร้อมกันเพื่อหลอกระบบ iPhone ให้ยอมปล่อยเสียง
         beepAudio.play().catch(e => console.log("Beep error"));
         window.speechSynthesis.speak(msg);
     }
@@ -185,8 +186,14 @@
 
     socket.on("call_queue_locally", data => speakLocally(data.queue, false));
     socket.on("speak_locally", data => speakLocally(data.msg, true));
-    socket.on("queue_updated", data => { currentEl.innerText = data.current; lastEl.innerText = data.last; });
-    socket.on("reset_done", () => { currentEl.innerText = "--"; lastEl.innerText = "--"; });
+    socket.on("queue_updated", data => { 
+        currentEl.innerText = data.current; 
+        lastEl.innerText = data.last; 
+    });
+    socket.on("reset_done", () => { 
+        currentEl.innerText = "--"; 
+        lastEl.innerText = "--"; 
+    });
 
     window.speechSynthesis.onvoiceschanged = getFemaleVoice;
 </script>
