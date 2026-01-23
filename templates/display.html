@@ -43,11 +43,10 @@
             font-weight: 400;
         }
 
-        /* หน้ากากปลดล็อกเสียง (iOS บังคับ) */
         #unlock-screen {
             position: fixed;
             inset: 0;
-            background: rgba(0,0,0,0.9);
+            background: rgba(0,0,0,0.95);
             color: white;
             display: flex;
             flex-direction: column;
@@ -78,8 +77,8 @@
 <body>
 
 <div id="unlock-screen" onclick="handleUnlockAudio()">
-    <div class="unlock-button">แตะหน้าจอเพื่อเริ่มระบบ (เสียง)</div>
-    <p style="margin-top: 20px; font-size: 20px; color: #ccc;">กรุณาแตะ 1 ครั้งเพื่อให้เสียงทำงานบน iPhone</p>
+    <div class="unlock-button">แตะหน้าจอเพื่อเริ่มระบบเสียง</div>
+    <p style="margin-top: 20px; font-size: 18px; color: #ccc;">(จำเป็นสำหรับ iPhone/iPad)</p>
 </div>
 
 <div class="container">
@@ -93,66 +92,60 @@
     const queueElement = document.getElementById("queue-display");
     const unlockScreen = document.getElementById("unlock-screen");
     
-    // โหลดไฟล์เสียง Beep จาก static
     const beepAudio = new Audio("/static/beep.mp3");
     let isAudioUnlocked = false;
 
-    // ค้นหาเสียงผู้หญิงไทย
     function findThaiFemaleVoice() {
         const voices = window.speechSynthesis.getVoices();
         return voices.find(v => v.lang.includes('th') && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Female'))) 
                || voices.find(v => v.lang.includes('th'));
     }
 
-    // ฟังก์ชันปลดล็อกเสียงสำหรับ iPhone
     function handleUnlockAudio() {
         isAudioUnlocked = true;
         unlockScreen.style.display = "none";
         
-        // ทดสอบเล่นเสียงสั้นๆ เพื่อเปิดทางลำโพง
+        // สั่งเล่น beep สั้นๆ เพื่อเปิดทางลำโพง
         beepAudio.play().then(() => {
             beepAudio.pause();
             beepAudio.currentTime = 0;
-        }).catch(e => console.log("Audio unlock failed:", e));
+        });
         
-        const welcome = new SpeechSynthesisUtterance("ระบบเริ่มทำงานค่ะ");
+        const welcome = new SpeechSynthesisUtterance("ระบบพร้อมค่ะ");
         welcome.lang = 'th-TH';
         window.speechSynthesis.speak(welcome);
     }
 
-    // ฟังก์ชัน: เล่นเสียง Beep แล้วค่อยพูดคิว
+    // ฟังก์ชันพูดที่แก้บั๊ก iPhone (สั่งพร้อมกันแต่ใช้ Silence นำ)
     function playQueueVoice(queueText) {
         if (!isAudioUnlocked) return;
 
-        // หยุดเสียงที่พูดค้างอยู่ทั้งหมด
+        // 1. เคลียร์เสียงที่ค้างอยู่
         window.speechSynthesis.cancel();
 
-        // 1. เล่นเสียง Beep
-        beepAudio.play().then(() => {
-            // 2. รอจังหวะนิดนึงให้ Beep นำก่อนแล้วค่อยพูด (ปรับ 800ms ตามใจชอบ)
-            setTimeout(() => {
-                // อ่านแยกหลัก: คิว ศูนย์ ศูนย์ หนึ่ง
-                let digits = queueText.replace("Q", "").split("").join(" ");
-                const msg = new SpeechSynthesisUtterance("คิว " + digits);
-                msg.lang = 'th-TH';
-                msg.rate = 0.9;
-                
-                const voice = findThaiFemaleVoice();
-                if (voice) msg.voice = voice;
-                
-                window.speechSynthesis.speak(msg);
-            }, 800); 
-        }).catch(e => console.log("Beep error:", e));
+        // 2. จัดรูปแบบเลขคิว: คิว ศูนย์ ศูนย์ หนึ่ง
+        let digits = queueText.replace("Q", "").split("").join(" ");
+        
+        // 3. ใช้เทคนิค " , , " (คอมม่า) เพื่อสร้างช่องว่างให้กระดิ่งเล่นจบก่อนพูด
+        // iPhone จะมองว่านี่คือการสั่งงานก้อนเดียวกันจากการรับ Socket
+        const msg = new SpeechSynthesisUtterance(", , , คิว " + digits);
+        msg.lang = 'th-TH';
+        msg.rate = 0.9;
+        
+        const voice = findThaiFemaleVoice();
+        if (voice) msg.voice = voice;
+
+        // 4. สั่งเล่นกระดิ่งและสั่งพูดในจังหวะติดกันทันที
+        beepAudio.play().catch(e => console.log("Beep error:", e));
+        window.speechSynthesis.speak(msg);
     }
 
-    /* --- รับสัญญาณ Socket --- */
+    /* --- Socket Events --- */
 
-    // รับสัญญาณเมื่อเคาน์เตอร์ "ปิด" สวิตช์เสียง
     socket.on("call_queue_display", function(data) {
         let q = data.queue;
         queueElement.innerText = q;
         
-        // เอฟเฟกต์ตัวเลขเด้ง
         queueElement.classList.remove("animate-pop");
         void queueElement.offsetWidth;
         queueElement.classList.add("animate-pop");
@@ -160,20 +153,17 @@
         playQueueVoice(q);
     });
 
-    // รับสัญญาณข้ามออเดอร์ หรือประกาศอื่นๆ
     socket.on("speak_only", function(data) {
         if (!isAudioUnlocked) return;
         window.speechSynthesis.cancel();
         
-        beepAudio.play().then(() => {
-            setTimeout(() => {
-                const msg = new SpeechSynthesisUtterance(data.msg);
-                msg.lang = 'th-TH';
-                const voice = findThaiFemaleVoice();
-                if (voice) msg.voice = voice;
-                window.speechSynthesis.speak(msg);
-            }, 800);
-        });
+        const msg = new SpeechSynthesisUtterance(", , , " + data.msg);
+        msg.lang = 'th-TH';
+        const voice = findThaiFemaleVoice();
+        if (voice) msg.voice = voice;
+        
+        beepAudio.play().catch(e => console.log("Beep error:", e));
+        window.speechSynthesis.speak(msg);
     });
 
     socket.on("queue_updated", data => {
