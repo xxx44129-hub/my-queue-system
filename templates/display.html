@@ -164,7 +164,7 @@
         if (!isAudioUnlocked) return;
         window.speechSynthesis.cancel();
         
-        const msg = new SpeechSynthesisUtterance(", , , , , , , " + data.msg);
+        const msg = new SpeechSynthesisUtterance(", , , , , , , , , , " + data.msg);
         msg.lang = 'th-TH';
         const voice = findThaiFemaleVoice();
         if (voice) msg.voice = voice;
@@ -188,4 +188,5 @@
 </script>
 </body>
 </html>
+
 
