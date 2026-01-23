@@ -5,7 +5,7 @@
     <title>Queue Counter Control</title>
     <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
     <style>
-        /* CSS ดีไซน์เต็มรูปแบบ ไม่มีการตัดทอน */
+        /* CSS ดีไซน์เต็มรูปแบบ กูคงเดิมไว้ให้ 100% */
         body {
             margin: 0;
             font-family: "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif;
@@ -76,6 +76,8 @@
             align-items: center;
             justify-content: center;
             gap: 12px;
+            font-size: 15px;
+            color: #334155;
         }
     </style>
 </head>
@@ -109,9 +111,12 @@
     const lastEl = document.getElementById("last");
     const inputEl = document.getElementById("setQueue");
     const voiceToggle = document.getElementById("voiceToggle");
+    
+    // โหลดไฟล์เสียง Beep จาก static
+    const beepAudio = new Audio("/static/beep.mp3");
     let audioUnlocked = false;
 
-    // ฟังก์ชันดึงเสียงผู้หญิงไทย (iPhone/PC)
+    // ฟังก์ชันดึงเสียงผู้หญิงไทย
     function getFemaleVoice() {
         const voices = window.speechSynthesis.getVoices();
         let thaiVoice = voices.find(v => v.lang.includes('th') && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Female')));
@@ -121,29 +126,42 @@
         return thaiVoice;
     }
 
-    // ปลดล็อกเสียงสำหรับ iPhone
+    // ปลดล็อกเสียง (ต้องรันตอนกดปุ่มเพื่อให้ iPhone ยอมให้เล่นเสียง)
     function unlockAudio() {
         if (!audioUnlocked) {
-            const msg = new SpeechSynthesisUtterance("");
-            window.speechSynthesis.speak(msg);
+            // เล่น Beep สั้นๆ เพื่อปลดล็อกลำโพง
+            beepAudio.play().then(() => {
+                beepAudio.pause();
+                beepAudio.currentTime = 0;
+            }).catch(e => console.log("Unlock failed"));
             audioUnlocked = true;
         }
     }
 
-    // ฟังก์ชันพูดสำหรับหน้า Counter
-    function speakCounter(text) {
+    // ฟังก์ชันพูดสำหรับเครื่อง Counter (มี Beep นำ)
+    function speakLocally(text, isDirectMsg = false) {
         if (!voiceToggle.checked) return;
         window.speechSynthesis.cancel();
         
-        const msg = new SpeechSynthesisUtterance(text);
-        msg.lang = 'th-TH';
-        msg.rate = 0.9;
-        const voice = getFemaleVoice();
-        if (voice) msg.voice = voice;
-        window.speechSynthesis.speak(msg);
+        beepAudio.play().then(() => {
+            setTimeout(() => {
+                let finalSpeech = text;
+                if (!isDirectMsg) {
+                    let digits = text.replace("Q", "").split("").join(" ");
+                    finalSpeech = "คิว " + digits;
+                }
+                
+                const msg = new SpeechSynthesisUtterance(finalSpeech);
+                msg.lang = 'th-TH';
+                msg.rate = 0.9;
+                const voice = getFemaleVoice();
+                if (voice) msg.voice = voice;
+                window.speechSynthesis.speak(msg);
+            }, 800); // รอ Beep 0.8 วิ
+        });
     }
 
-    // --- ฟังก์ชันปุ่มต่างๆ ---
+    // --- ฟังก์ชันจัดการปุ่มกด ---
 
     function handleNextQueue() {
         unlockAudio();
@@ -153,12 +171,7 @@
             currentNum = parseInt(currentText.replace("Q", ""));
         }
         let nextQ = "Q" + String(currentNum + 1).padStart(3, '0');
-        
-        // ส่งเลขคิว + สถานะสวิตช์
-        socket.emit("set_queue", { 
-            queue: nextQ, 
-            voice_on_counter: voiceToggle.checked 
-        });
+        socket.emit("set_queue", { queue: nextQ, voice_on_counter: voiceToggle.checked });
     }
 
     function handleManualSet() {
@@ -166,10 +179,7 @@
         let val = inputEl.value.trim();
         if (val === "") return;
         let formattedQ = "Q" + val.padStart(3, '0');
-        socket.emit("set_queue", { 
-            queue: formattedQ, 
-            voice_on_counter: voiceToggle.checked 
-        });
+        socket.emit("set_queue", { queue: formattedQ, voice_on_counter: voiceToggle.checked });
         inputEl.value = "";
     }
 
@@ -177,38 +187,29 @@
         unlockAudio();
         let currentQ = currentEl.innerText;
         if (currentQ !== "--") {
-            socket.emit("set_queue", { 
-                queue: currentQ, 
-                voice_on_counter: voiceToggle.checked 
-            });
+            socket.emit("set_queue", { queue: currentQ, voice_on_counter: voiceToggle.checked });
         }
     }
 
     function handleSkipOrder() {
         unlockAudio();
-        // 🎯 ส่งสถานะสวิตช์ไปด้วย เพื่อให้ Server รู้ว่าต้องให้ใครพูด
-        socket.emit('skip_order', { 
-            voice_on_counter: voiceToggle.checked 
-        });
+        socket.emit('skip_order', { voice_on_counter: voiceToggle.checked });
     }
 
     function handleResetSystem() {
-        if (confirm("ต้องการรีเซ็ตคิวทั้งหมด?")) {
+        if (confirm("ต้องการรีเซ็ตคิวทั้งหมดเป็น 0?")) {
             socket.emit('reset');
         }
     }
 
     // --- Socket Events ---
 
-    // รับสัญญาณพูดคิว (กรณีสวิตช์เปิด)
     socket.on("call_queue_locally", data => {
-        let digits = data.queue.replace("Q", "").split("").join(" ");
-        speakCounter("คิว " + digits);
+        speakLocally(data.queue, false);
     });
 
-    // รับสัญญาณพูดข้อความอื่นๆ เช่น ข้ามออเดอร์ (กรณีสวิตช์เปิด)
     socket.on("speak_locally", data => {
-        speakCounter(data.msg);
+        speakLocally(data.msg, true);
     });
 
     socket.on("queue_updated", data => {
