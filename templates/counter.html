@@ -116,56 +116,56 @@
         return voices.find(v => v.lang.includes('th') && (v.name.includes('Kanya') || v.name.includes('Narisa') || v.name.includes('Female'))) || voices.find(v => v.lang.includes('th'));
     }
 
-    // ปลดล็อกเสียงสำหรับ iPhone
+    // ปลดล็อกลำโพง iPhone ผ่านปุ่มกด
     function unlockAudio() {
         if (!audioUnlocked) {
             beepAudio.play().then(() => { beepAudio.pause(); beepAudio.currentTime = 0; });
-            const silent = new SpeechSynthesisUtterance("");
-            window.speechSynthesis.speak(silent);
+            window.speechSynthesis.speak(new SpeechSynthesisUtterance(""));
             audioUnlocked = true;
         }
     }
 
-    // ฟังก์ชันพูดที่แก้บั๊ก iPhone (กระดิ่ง + พูด พร้อมกัน)
-    function speakLocally(text, isDirectMsg = false) {
+    // ฟังก์ชันพูดที่รอ Beep จบก่อน (แก้เสียงทับกัน)
+    function playBeepThenSpeakLocally(textToSpeak) {
         if (!voiceToggle.checked) return;
         
         window.speechSynthesis.cancel();
-        
-        let finalSpeech = text;
-        if (!isDirectMsg) {
-            let digits = text.replace("Q", "").split("").join(" ");
-            // 🎯 ใส่คอมม่า ( , ) เยอะๆ เพื่อถ่างช่วงเวลาให้กระดิ่งจบก่อนพูด
-            finalSpeech = ", , , , , , , , , , คิว " + digits;
-        } else {
-            finalSpeech = ", , , , , , , , , , " + text;
-        }
+        beepAudio.currentTime = 0;
 
-        const msg = new SpeechSynthesisUtterance(finalSpeech);
-        msg.lang = 'th-TH';
-        msg.rate = 0.9;
-        const voice = getFemaleVoice();
-        if (voice) msg.voice = voice;
+        // เมื่อกระดิ่งเล่นจบ (1 วินาที) ค่อยเริ่มพูด
+        beepAudio.onended = function() {
+            const msg = new SpeechSynthesisUtterance(textToSpeak);
+            msg.lang = 'th-TH';
+            msg.rate = 1.0;
+            const voice = getFemaleVoice();
+            if (voice) msg.voice = voice;
+            window.speechSynthesis.speak(msg);
+        };
 
-        // สั่งทำงานพร้อมกันเพื่อหลอกระบบ iPhone ให้ยอมปล่อยเสียง
-        beepAudio.play().catch(e => console.log("Beep error"));
-        window.speechSynthesis.speak(msg);
+        beepAudio.play().catch(e => {
+            // ถ้าเล่นเพลงไม่ได้ ให้พูดเลย
+            const msg = new SpeechSynthesisUtterance(textToSpeak);
+            msg.lang = 'th-TH';
+            window.speechSynthesis.speak(msg);
+        });
     }
+
+    /* --- ฟังก์ชันปุ่มต่างๆ --- */
 
     function handleNextQueue() {
         unlockAudio();
         let currentText = currentEl.innerText;
         let nextNum = (currentText === "--" || currentText === "") ? 1 : parseInt(currentText.replace("Q", "")) + 1;
-        let nextQ = "Q" + String(nextNum).padStart(3, '0');
-        socket.emit("set_queue", { queue: nextQ, voice_on_counter: voiceToggle.checked });
+        socket.emit("set_queue", { queue: "Q" + String(nextNum).padStart(3, '0'), voice_on_counter: voiceToggle.checked });
     }
 
     function handleManualSet() {
         unlockAudio();
         let val = inputEl.value.trim();
-        if (val === "") return;
-        socket.emit("set_queue", { queue: "Q" + val.padStart(3, '0'), voice_on_counter: voiceToggle.checked });
-        inputEl.value = "";
+        if (val !== "") {
+            socket.emit("set_queue", { queue: "Q" + val.padStart(3, '0'), voice_on_counter: voiceToggle.checked });
+            inputEl.value = "";
+        }
     }
 
     function handleCallAgain() {
@@ -184,19 +184,28 @@
         if (confirm("รีเซ็ตคิวทั้งหมด?")) socket.emit('reset');
     }
 
-    socket.on("call_queue_locally", data => speakLocally(data.queue, false));
-    socket.on("speak_locally", data => speakLocally(data.msg, true));
-    socket.on("queue_updated", data => { 
-        currentEl.innerText = data.current; 
-        lastEl.innerText = data.last; 
+    /* --- Socket Listeners --- */
+
+    socket.on("call_queue_locally", data => {
+        let digits = data.queue.replace("Q", "").split("").join(" ");
+        playBeepThenSpeakLocally("คิว " + digits);
     });
-    socket.on("reset_done", () => { 
-        currentEl.innerText = "--"; 
-        lastEl.innerText = "--"; 
+
+    socket.on("speak_locally", data => {
+        playBeepThenSpeakLocally(data.msg);
+    });
+
+    socket.on("queue_updated", data => {
+        currentEl.innerText = data.current;
+        lastEl.innerText = data.last;
+    });
+
+    socket.on("reset_done", () => {
+        currentEl.innerText = "--";
+        lastEl.innerText = "--";
     });
 
     window.speechSynthesis.onvoiceschanged = getFemaleVoice;
 </script>
 </body>
 </html>
-
