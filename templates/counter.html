@@ -136,9 +136,9 @@
         if (!isDirectMsg) {
             let digits = text.replace("Q", "").split("").join(" ");
             // 🎯 ใส่คอมม่า ( , ) เยอะๆ เพื่อถ่างช่วงเวลาให้กระดิ่งจบก่อนพูด
-            finalSpeech = ", , , , , , , คิว " + digits;
+            finalSpeech = ", , , , , , , , , , คิว " + digits;
         } else {
-            finalSpeech = ", , , , , , , " + text;
+            finalSpeech = ", , , , , , , , , , " + text;
         }
 
         const msg = new SpeechSynthesisUtterance(finalSpeech);
@@ -199,3 +199,4 @@
 </script>
 </body>
 </html>
+
